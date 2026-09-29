@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบคำของบประมาณรายจ่ายงบลงทุน - สำนักงานปลัดกระทรวงอุตสาหกรรม (Clean Edition)</title>
+    <title>ระบบจัดทำคำของบประมาณงบลงทุน - สป.อก.</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -52,8 +52,8 @@
 
     <style>
         body {
-            background-color: #f8fafc; /* Tailwind slate-50 */
-            color: #334155; /* Tailwind slate-700 */
+            background-color: #f8fafc;
+            color: #334155;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -75,13 +75,11 @@
             box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
         }
 
-        /* Scrollbar styling for a cleaner look */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
-        /* Map Tooltip fix */
         .google-visualization-tooltip {
             font-family: 'Sarabun', sans-serif !important;
             border: none !important;
@@ -113,7 +111,6 @@
             return 'อื่นๆ';
         };
 
-        // ISO-3166-2 Codes for Google GeoChart (Thailand Provinces)
         const provinceMapping = {
             'กรุงเทพมหานคร': 'TH-10', 'สมุทรปราการ': 'TH-11', 'นนทบุรี': 'TH-12', 'ปทุมธานี': 'TH-13', 'พระนครศรีอยุธยา': 'TH-14',
             'อ่างทอง': 'TH-15', 'ลพบุรี': 'TH-16', 'สิงห์บุรี': 'TH-17', 'ชัยนาท': 'TH-18', 'สระบุรี': 'TH-19',
@@ -150,19 +147,25 @@
 
         const formatCurrency = (amount) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(amount);
 
+        const ROLES = {
+            OPERATOR: { id: 'operator', name: 'ระดับปฏิบัติการ (สอจ.)', icon: 'fa-user-gear', badge: 'bg-emerald-100 text-emerald-800' },
+            CENTRAL: { id: 'central', name: 'ส่วนกลาง / กลุ่มงานงบประมาณ', icon: 'fa-user-check', badge: 'bg-blue-100 text-blue-800' },
+            EXECUTIVE: { id: 'executive', name: 'ผู้บริหารระดับสูง', icon: 'fa-user-tie', badge: 'bg-purple-100 text-purple-800' }
+        };
+
         const generateInitialData = () => {
             let currentTotal = 0;
-            const targetTotal = 500000000; // 500 Million
+            const targetTotal = 500000000;
+            const statuses = ['submitted', 'submitted', 'reviewed', 'returned', 'approved'];
             
-            // Step 1: Create raw random data
             const rawData = provincesList.map((province, index) => {
                 const cat = mainCategories[Math.floor(Math.random() * mainCategories.length)];
                 const typeList = subTypes[cat];
                 const type = typeList[Math.floor(Math.random() * typeList.length)];
                 
-                // Random base budget between 2,000,000 and 15,000,000
                 const rawBudget = Math.floor(Math.random() * 13000000) + 2000000;
                 currentTotal += rawBudget;
+                const status = statuses[index % statuses.length];
 
                 return {
                     id: index + 1,
@@ -172,54 +175,215 @@
                     type: type,
                     item: `${type} จังหวัด${province}`,
                     budget: rawBudget,
-                    status: 'submitted',
+                    status: status,
+                    revisionNote: status === 'returned' ? 'กรุณาปรับลดประมาณการค่าใช้จ่ายให้สอดคล้องกับเกณฑ์มาตรฐาน สป.อก.' : '',
+                    attachments: ['เอกสารขอตั้งงบประมาณ_ปี68.pdf', 'แบบแปลนราคากลาง.pdf'],
                     date: '2023-10-01'
                 };
             });
 
-            // Step 2: Normalize to exactly 500,000,000
             const ratio = targetTotal / currentTotal;
             let finalTotal = 0;
 
             const normalizedData = rawData.map((req, index) => {
                 let adjustedBudget = Math.round(req.budget * ratio);
-                
-                // Ensure the last item rounds exactly to the target to avoid decimal mismatches
                 if (index === rawData.length - 1) {
                     adjustedBudget = targetTotal - finalTotal;
                 }
-                
                 finalTotal += adjustedBudget;
                 return { ...req, budget: adjustedBudget };
             });
 
-            return normalizedData.sort((a, b) => b.budget - a.budget); // Sort by budget highest first
+            return normalizedData.sort((a, b) => b.budget - a.budget);
         };
 
         const initialData = generateInitialData();
 
+        const initialAssetData = [
+            { id: 101, province: 'กรุงเทพมหานคร', name: 'อาคารสำนักงาน ปลัดกระทรวงอุตสาหกรรม', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 40, landRights: 'สำนักงานพระคลังข้างที่', areaSize: '3-1-2 ไร่', staffCount: 231, maintenanceCost: 2257576, utilityCost: 7560663 },
+            { id: 102, province: 'กรุงเทพมหานคร', name: 'อาคารสโมสร สป.อก.', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 35, landRights: 'สำนักงานพระคลังข้างที่', areaSize: '1-0-42 ไร่', staffCount: 83, maintenanceCost: 930436, utilityCost: 196707 },
+            { id: 103, province: 'กระบี่', name: 'อาคารสำนักงาน เลขที่ 196', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 30, landRights: 'ป่าสงวนแห่งชาติ (บริเวณศูนย์ราชการ)', areaSize: '1-3-35 ไร่', staffCount: 22, maintenanceCost: 20000, utilityCost: 200000 },
+            { id: 104, province: 'กระบี่', name: 'บ้านพักข้าราชการ เลขที่ 196/3 (อาคารชุด 4 ชั้น)', category: 'บ้านพักข้าราชการ', level: 'ระดับ 5-6', quantity: 1, age: 9, landRights: 'ป่าสงวนแห่งชาติ (บริเวณศูนย์ราชการ)', areaSize: '1-3-35 ไร่', staffCount: 6, maintenanceCost: 2500, utilityCost: 0 },
+            { id: 105, province: 'กาญจนบุรี', name: 'อาคารสำนักงาน สอจ.กาญจนบุรี', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 32, landRights: 'ที่ราชพัสดุ', areaSize: '2-1-0 ไร่', staffCount: 31, maintenanceCost: 257500, utilityCost: 336000 },
+            { id: 106, province: 'กาญจนบุรี', name: 'บ้านพักข้าราชการ เลขที่ 11/2', category: 'บ้านพักข้าราชการ', level: 'ระดับ 7-8', quantity: 1, age: 30, landRights: 'ที่ราชพัสดุ', areaSize: '1-1-80 ไร่', staffCount: 1, maintenanceCost: 5000, utilityCost: 0 },
+            { id: 107, province: 'กาญจนบุรี', name: 'บ้านพักข้าราชการ เลขที่ 11/3', category: 'บ้านพักข้าราชการ', level: 'ระดับ 5-6', quantity: 1, age: 30, landRights: 'ที่ราชพัสดุ', areaSize: '-', staffCount: 1, maintenanceCost: 3500, utilityCost: 0 },
+            { id: 108, province: 'กาฬสินธุ์', name: 'อาคารสำนักงาน เลขที่ 6/1', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 38, landRights: 'ที่ราชพัสดุ', areaSize: '2-1-15 ไร่', staffCount: 21, maintenanceCost: 10000, utilityCost: 201600 },
+            { id: 109, province: 'กาฬสินธุ์', name: 'บ้านพักข้าราชการ เลขที่ 6/2', category: 'บ้านพักข้าราชการ', level: 'ระดับ 7-8', quantity: 1, age: 38, landRights: 'ที่ราชพัสดุ', areaSize: '-', staffCount: 1, maintenanceCost: 3000, utilityCost: 0 },
+            { id: 110, province: 'ขอนแก่น', name: 'อาคารสำนักงาน สอจ.ขอนแก่น', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 48, landRights: 'ที่ราชพัสดุ', areaSize: '3-0-85 ไร่', staffCount: 34, maintenanceCost: 50000, utilityCost: 170000 },
+            { id: 111, province: 'ขอนแก่น', name: 'บ้านพักข้าราชการ เลขที่ 103/9-10', category: 'บ้านพักข้าราชการ', level: 'ระดับ 7-8', quantity: 2, age: 29, landRights: 'ที่ราชพัสดุ', areaSize: '2-0-85 ไร่', staffCount: 2, maintenanceCost: 10000, utilityCost: 21000 },
+            { id: 112, province: 'จันทบุรี', name: 'อาคารสำนักงาน เลขที่ 200', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 45, landRights: 'ที่ราชพัสดุ', areaSize: '3-36-30 ไร่', staffCount: 19, maintenanceCost: 27806, utilityCost: 147803 },
+            { id: 113, province: 'จันทบุรี', name: 'บ้านพักข้าราชการ เลขที่ 202', category: 'บ้านพักข้าราชการ', level: 'ระดับ 7-8', quantity: 1, age: 34, landRights: 'ที่ราชพัสดุ', areaSize: '-', staffCount: 1, maintenanceCost: 7500, utilityCost: 0 },
+            { id: 114, province: 'ชลบุรี', name: 'อาคารสำนักงาน (อาคาร 1)', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 38, landRights: 'ที่ราชพัสดุ', areaSize: '6-26-0 ไร่', staffCount: 31, maintenanceCost: 15000, utilityCost: 280000 },
+            { id: 115, province: 'ชลบุรี', name: 'บ้านพักข้าราชการ เลขที่ 97/126', category: 'บ้านพักข้าราชการ', level: 'ระดับ 7-8', quantity: 1, age: 38, landRights: 'ที่ราชพัสดุ', areaSize: '-', staffCount: 1, maintenanceCost: 5000, utilityCost: 0 },
+            { id: 116, province: 'ชัยนาท', name: 'อาคารสำนักงาน เลขที่ 444', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 30, landRights: 'ที่สาธารณประโยชน์', areaSize: '6-3-78 ไร่', staffCount: 22, maintenanceCost: 20000, utilityCost: 216000 },
+            { id: 117, province: 'ชัยภูมิ', name: 'อาคารสำนักงาน เลขที่ 255', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 38, landRights: 'ที่ราชพัสดุ', areaSize: '2-2-50 ไร่', staffCount: 22, maintenanceCost: 441000, utilityCost: 138000 },
+            { id: 118, province: 'ชุมพร', name: 'อาคารสำนักงาน เลขที่ 201', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 31, landRights: 'ที่ราชพัสดุ', areaSize: '1-2-31 ไร่', staffCount: 23, maintenanceCost: 25000, utilityCost: 150000 },
+            { id: 119, province: 'เชียงราย', name: 'อาคารสำนักงาน ถนนไกรสรสิทธิ์', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 46, landRights: 'ที่ราชพัสดุ', areaSize: '640 ตร.ม.', staffCount: 26, maintenanceCost: 40000, utilityCost: 174000 },
+            { id: 120, province: 'เชียงใหม่', name: 'อาคารสำนักงาน (ศูนย์ราชการ)', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 26, landRights: 'ที่ราชพัสดุ', areaSize: '1 ไร่ 95 ตร.วา', staffCount: 37, maintenanceCost: 65000, utilityCost: 310000 },
+            { id: 121, province: 'ตรัง', name: 'อาคารสำนักงานสองชั้น เลขที่ 200', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 20, landRights: 'ที่ราชพัสดุ', areaSize: '4-1-94 ไร่', staffCount: 21, maintenanceCost: 35000, utilityCost: 172000 },
+            { id: 122, province: 'ตราด', name: 'อาคารสำนักงาน เลขที่ 322/10', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 31, landRights: 'ที่ราชพัสดุ', areaSize: '4-2-11 ไร่', staffCount: 18, maintenanceCost: 20000, utilityCost: 145000 },
+            { id: 123, province: 'ตาก', name: 'อาคารสำนักงาน เลขที่ 402', category: 'อาคารสำนักงาน', level: '-', quantity: 1, age: 42, landRights: 'ที่ราชพัสดุ', areaSize: '2-0-0 ไร่', staffCount: 26, maintenanceCost: 30000, utilityCost: 168000 }
+        ];
+
+        const ThailandMap = ({ requests }) => {
+            const mapRef = useRef(null);
+            const [isLoaded, setIsLoaded] = useState(false);
+
+            useEffect(() => {
+                if (window.google && window.google.charts) {
+                    window.google.charts.load('current', {
+                        packages: ['geochart'],
+                    });
+                    window.google.charts.setOnLoadCallback(() => {
+                        setIsLoaded(true);
+                    });
+                }
+            }, []);
+
+            useEffect(() => {
+                if (!isLoaded || !mapRef.current || !window.google || !window.google.visualization) return;
+
+                const budgetByProvince = {};
+                requests.forEach(r => {
+                    const isoCode = provinceMapping[r.province];
+                    if (isoCode) {
+                        budgetByProvince[isoCode] = (budgetByProvince[isoCode] || 0) + Number(r.budget);
+                    }
+                });
+
+                const dataArray = [['Provinces', 'งบประมาณ (บาท)']];
+                Object.keys(provinceMapping).forEach(provName => {
+                    const isoCode = provinceMapping[provName];
+                    dataArray.push([{ v: isoCode, f: provName }, budgetByProvince[isoCode] || 0]);
+                });
+
+                const data = window.google.visualization.arrayToDataTable(dataArray);
+
+                const options = {
+                    region: 'TH',
+                    resolution: 'provinces',
+                    colorAxis: { colors: ['#f3e8ff', '#9333ea', '#581c87'] },
+                    backgroundColor: 'transparent',
+                    datalessRegionColor: '#f1f5f9',
+                    defaultColor: '#f1f5f9',
+                    tooltip: { textStyle: { fontName: 'Sarabun', fontSize: 13 } }
+                };
+
+                const chart = new window.google.visualization.GeoChart(mapRef.current);
+                chart.draw(data, options);
+
+                const handleResize = () => {
+                    if (chart && data) chart.draw(data, options);
+                };
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, [isLoaded, requests]);
+
+            return (
+                <div className="w-full h-full min-h-[400px] flex items-center justify-center relative">
+                    {!isLoaded && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-50/50 rounded-xl">
+                            <span className="text-sm font-semibold text-slate-500 flex items-center gap-2">
+                                <i className="fas fa-spinner fa-spin text-brand-600"></i> กำลังโหลดแผนที่ประเทศไทย...
+                            </span>
+                        </div>
+                    )}
+                    <div ref={mapRef} className="w-full h-full min-h-[400px]"></div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [view, setView] = useState('dashboard');
             const [requests, setRequests] = useState(initialData);
+            const [assets, setAssets] = useState(initialAssetData);
+            const [editingAsset, setEditingAsset] = useState(null);
+            const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+            const [currentRole, setCurrentRole] = useState(ROLES.OPERATOR.id);
+            const [userProvince, setUserProvince] = useState('เชียงใหม่');
+            const [selectedRequestForReturn, setSelectedRequestForReturn] = useState(null);
+            const [returnNote, setReturnNote] = useState('');
+            const [attachmentModalReq, setAttachmentModalReq] = useState(null);
+            const [toastMessage, setToastMessage] = useState(null);
+
+            const showToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => setToastMessage(null), 3000);
+            };
+
+            const handleSaveAsset = (assetData) => {
+                if (assetData.id) {
+                    setAssets(assets.map(a => a.id === assetData.id ? assetData : a));
+                    showToast('ปรับปรุงข้อมูลอาคาร/สิ่งปลูกสร้างเรียบร้อยแล้ว');
+                } else {
+                    const newEntry = { ...assetData, id: Date.now() };
+                    setAssets([newEntry, ...assets]);
+                    showToast('เพิ่มรายการอาคาร/สิ่งปลูกสร้างเรียบร้อยแล้ว');
+                }
+                setIsAssetModalOpen(false);
+                setEditingAsset(null);
+            };
+
+            const handleDeleteAsset = (id) => {
+                if (window.confirm('คุณต้องการลบรายการอาคาร/สิ่งปลูกสร้างนี้ใช่หรือไม่?')) {
+                    setAssets(assets.filter(a => a.id !== id));
+                    showToast('ลบรายการเรียบร้อยแล้ว');
+                }
+            };
 
             const handleAddRequest = (newRequest) => {
-                setRequests([{ ...newRequest, id: Date.now(), status: 'submitted', date: new Date().toISOString().split('T')[0] }, ...requests]);
+                const reqToAdd = {
+                    ...newRequest,
+                    id: Date.now(),
+                    province: currentRole === ROLES.OPERATOR.id ? userProvince : newRequest.province,
+                    status: 'submitted',
+                    attachments: newRequest.attachments || ['เอกสารแนบคำขอ.pdf'],
+                    date: new Date().toISOString().split('T')[0]
+                };
+                setRequests([reqToAdd, ...requests]);
                 setView('list');
+                showToast('ยื่นคำขอบันทึกเรียบร้อยแล้ว');
+            };
+
+            const handleUpdateStatus = (id, newStatus, note = '') => {
+                setRequests(requests.map(req => {
+                    if (req.id === id) {
+                        return { ...req, status: newStatus, revisionNote: note || req.revisionNote };
+                    }
+                    return req;
+                }));
+                showToast('อัปเดตสถานะคำขอเรียบร้อยแล้ว');
+            };
+
+            const handleReturnSubmit = (e) => {
+                e.preventDefault();
+                if (selectedRequestForReturn) {
+                    handleUpdateStatus(selectedRequestForReturn.id, 'returned', returnNote);
+                    setSelectedRequestForReturn(null);
+                    setReturnNote('');
+                }
             };
 
             return (
                 <div className="min-h-screen flex flex-col relative">
-                    {/* Clean Header / Navbar */}
+                    {/* Toast Alert Banner */}
+                    {toastMessage && (
+                        <div className="fixed bottom-5 right-5 z-50 bg-slate-800 text-white text-xs px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-bounce">
+                            <i className="fas fa-check-circle text-emerald-400"></i>
+                            <span>{toastMessage}</span>
+                        </div>
+                    )}
+
+                    {}
                     <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex flex-col md:flex-row justify-between h-auto md:h-20 py-4 md:py-0 items-center gap-4">
                                 <div className="flex items-center gap-4">
-                                    {/* Updated Logo Requirement */}
                                     <div className="p-1 rounded-full border border-slate-200 shadow-sm overflow-hidden bg-white">
-                                        <img src="3cba098fefeaaf5f116241adff99b6fb.jpg" 
+                                        <img src="https://upload.wikimedia.org/wikipedia/th/thumb/7/7b/Seal_of_the_Ministry_of_Industry_of_Thailand.svg/120px-Seal_of_the_Ministry_of_Industry_of_Thailand.svg.png" 
                                              alt="MOI Logo" 
                                              className="h-12 w-12 object-cover rounded-full" 
-                                             onError={(e) => { e.target.src = 'https://upload.wikimedia.org/wikipedia/th/thumb/7/7b/Seal_of_the_Ministry_of_Industry_of_Thailand.svg/120px-Seal_of_the_Ministry_of_Industry_of_Thailand.svg.png'; }} />
+                                             onError={(e) => { e.target.src = 'https://placehold.co/100x100/9333ea/ffffff?text=MOI'; }} />
                                     </div>
                                     <div>
                                         <h1 className="text-xl font-bold text-slate-800 tracking-tight">
@@ -228,294 +392,881 @@
                                         <p className="text-sm text-slate-500 font-medium">สำนักงานปลัดกระทรวงอุตสาหกรรม (สป.อก.)</p>
                                     </div>
                                 </div>
-                                <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                                    <button onClick={() => setView('dashboard')} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'dashboard' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
-                                        <i className="fas fa-chart-pie mr-2"></i>ภาพรวม
-                                    </button>
-                                    <button onClick={() => setView('form')} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'form' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
-                                        <i className="fas fa-plus-circle mr-2"></i>จัดทำคำขอ
-                                    </button>
-                                    <button onClick={() => setView('list')} className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'list' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
-                                        <i className="fas fa-list mr-2"></i>รายการทั้งหมด
-                                    </button>
-                                </nav>
+
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200 flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-500 px-2 flex items-center gap-1">
+                                            <i className="fas fa-shield-halved text-brand-600"></i> สิทธิ์:
+                                        </span>
+                                        <select 
+                                            value={currentRole} 
+                                            onChange={(e) => setCurrentRole(e.target.value)}
+                                            className="bg-white border border-slate-300 font-semibold text-xs rounded-xl px-3 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        >
+                                            <option value={ROLES.OPERATOR.id}>1. ระดับปฏิบัติการ (สอจ.)</option>
+                                            <option value={ROLES.CENTRAL.id}>2. ส่วนกลาง / กลุ่มงานงบฯ</option>
+                                            <option value={ROLES.EXECUTIVE.id}>3. ผู้บริหารระดับสูง</option>
+                                        </select>
+
+                                        {currentRole === ROLES.OPERATOR.id && (
+                                            <select 
+                                                value={userProvince} 
+                                                onChange={(e) => setUserProvince(e.target.value)}
+                                                className="bg-emerald-50 border border-emerald-300 font-bold text-xs rounded-xl px-2.5 py-1.5 text-emerald-800 focus:outline-none"
+                                            >
+                                                {provincesList.map(p => <option key={p} value={p}>สอจ. {p}</option>)}
+                                            </select>
+                                        )}
+                                    </div>
+
+                                    <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                        <button onClick={() => setView('dashboard')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'dashboard' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <i className="fas fa-chart-pie mr-1.5"></i>
+                                            {currentRole === ROLES.EXECUTIVE.id ? 'มุมมองผู้บริหาร' : 'ภาพรวม'}
+                                        </button>
+                                        
+                                        {}
+                                        <button onClick={() => setView('assets')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'assets' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <i className="fas fa-building-user mr-1.5"></i>สถานะงบลงทุน
+                                        </button>
+
+                                        {currentRole === ROLES.OPERATOR.id && (
+                                            <button onClick={() => setView('form')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'form' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                                <i className="fas fa-plus-circle mr-1.5"></i>ยื่นคำขอใหม่
+                                            </button>
+                                        )}
+                                        <button onClick={() => setView('list')} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${view === 'list' ? 'bg-white shadow border border-slate-200 text-brand-700' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <i className="fas fa-list mr-1.5"></i>รายการคำขอ
+                                        </button>
+                                    </nav>
+                                </div>
                             </div>
                         </div>
                     </header>
 
+                    {/* Active Role Info Banner */}
+                    <div className="bg-gradient-to-r from-purple-900 via-brand-700 to-indigo-900 text-white px-4 py-2.5 text-xs font-medium shadow-inner">
+                        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+                            <div className="flex items-center gap-2">
+                                <span className="bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold text-[10px]">
+                                    Active Access Role
+                                </span>
+                                <span className="font-semibold text-yellow-300 flex items-center gap-1.5">
+                                    <i className={`fas ${ROLES[Object.keys(ROLES).find(k => ROLES[k].id === currentRole)].icon}`}></i>
+                                    {ROLES[Object.keys(ROLES).find(k => ROLES[k].id === currentRole)].name}
+                                </span>
+                                {currentRole === ROLES.OPERATOR.id && (
+                                    <span className="text-slate-200">| สิทธิ์จัดการเฉพาะพื้นที่: <strong className="text-white underline">สอจ. {userProvince}</strong></span>
+                                )}
+                            </div>
+                            <div className="text-purple-200 text-[11px] italic">
+                                {currentRole === ROLES.OPERATOR.id && '✓ สิทธิ์: สร้างคำขอ, แก้ไขเฉพาะของ สอจ. ตนเอง, แนบเอกสารประกอบ'}
+                                {currentRole === ROLES.CENTRAL.id && '✓ สิทธิ์: ตรวจสอบข้อมูลคำขอทั้ง 76 จังหวัด, ส่งกลับแก้ไข, สรุปเสนอผู้บริหาร'}
+                                {currentRole === ROLES.EXECUTIVE.id && '✓ สิทธิ์: ดูภาพรวมเชิงนโยบาย, วิเคราะห์งบประมาณ, พิจารณาอนุมัติ'}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Main Content Area */}
                     <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 z-10">
-                        {view === 'dashboard' && <Dashboard requests={requests} />}
-                        {view === 'form' && <RequestForm onSubmit={handleAddRequest} onCancel={() => setView('list')} />}
-                        {view === 'list' && <RequestList requests={requests} />}
-                    </main>
-                </div>
-            );
-        };
-
-        const ThailandMap = ({ requests }) => {
-            const chartRef = useRef(null);
-
-            useEffect(() => {
-                if (!window.google) return;
-
-                const drawChart = () => {
-                    const dataTable = new google.visualization.DataTable();
-                    dataTable.addColumn('string', 'Province Code');
-                    dataTable.addColumn('string', 'Province Name');
-                    dataTable.addColumn('number', 'งบประมาณ');
-                    dataTable.addColumn({type: 'string', role: 'tooltip', p: {html: true}});
-
-                    const rows = requests.map(req => {
-                        const iso = provinceMapping[req.province];
-                        if(!iso) return null;
+                        {view === 'dashboard' && <Dashboard requests={requests} currentRole={currentRole} userProvince={userProvince} onApproveAll={() => {
+                            setRequests(requests.map(r => r.status === 'reviewed' ? {...r, status: 'approved'} : r));
+                            showToast('อนุมัติคำขอทั้งหมดที่ผ่านการกลั่นกรองเรียบร้อยแล้ว');
+                        }} />}
                         
-                        const tooltipHtml = `
-                            <div style="padding: 10px; font-family: 'Sarabun', sans-serif;">
-                                <div style="font-weight: bold; font-size: 14px; color: #1e293b; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">จังหวัด${req.province}</div>
-                                <div style="color: #475569; font-size: 13px;">งบประมาณรวม</div>
-                                <div style="font-weight: bold; color: #9333ea; font-size: 16px;">${formatCurrency(req.budget)}</div>
-                                <div style="color: #64748b; font-size: 12px; margin-top: 4px;">ประเภท: ${getCategoryFromType(req.type)}</div>
+                        {}
+                        {view === 'assets' && (
+                            <AssetStatusView 
+                                assets={assets} 
+                                currentRole={currentRole} 
+                                userProvince={userProvince}
+                                onAddNew={() => { setEditingAsset(null); setIsAssetModalOpen(true); }}
+                                onEdit={(item) => { setEditingAsset(item); setIsAssetModalOpen(true); }}
+                                onDelete={handleDeleteAsset}
+                            />
+                        )}
+
+                        {view === 'form' && <RequestForm onSubmit={handleAddRequest} onCancel={() => setView('list')} userProvince={userProvince} />}
+                        {view === 'list' && (
+                            <RequestList 
+                                requests={requests} 
+                                currentRole={currentRole} 
+                                userProvince={userProvince}
+                                onUpdateStatus={handleUpdateStatus}
+                                onRequestReturn={(req) => setSelectedRequestForReturn(req)}
+                                onViewAttachments={(req) => setAttachmentModalReq(req)}
+                            />
+                        )}
+                    </main>
+
+                    {}
+                    {isAssetModalOpen && (
+                        <AssetFormModal 
+                            asset={editingAsset}
+                            userProvince={userProvince}
+                            currentRole={currentRole}
+                            onSave={handleSaveAsset}
+                            onClose={() => { setIsAssetModalOpen(false); setEditingAsset(null); }}
+                        />
+                    )}
+
+                    {/* Return Request Note Modal */}
+                    {selectedRequestForReturn && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-fade-in">
+                                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center text-amber-600">
+                                        <i className="fas fa-rotate-left mr-2"></i> คืนคำขอให้ สอจ. แก้ไข
+                                    </h3>
+                                    <button onClick={() => setSelectedRequestForReturn(null)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-lg"></i></button>
+                                </div>
+                                <p className="text-sm text-slate-600 mb-2">โครงการ: <strong>{selectedRequestForReturn.item}</strong> (สอจ. {selectedRequestForReturn.province})</p>
+                                <form onSubmit={handleReturnSubmit}>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ข้อเสนอแนะ / สาเหตุที่ส่งกลับแก้ไข <span className="text-red-500">*</span></label>
+                                    <textarea 
+                                        required 
+                                        rows="4" 
+                                        value={returnNote} 
+                                        onChange={(e) => setReturnNote(e.target.value)} 
+                                        placeholder="ระบุข้อผิดพลาดหรือสิ่งที่ต้องให้ สอจ. ปรับปรุงแก้ไข..." 
+                                        className="w-full input-field rounded-xl p-3 text-sm mb-4"
+                                    ></textarea>
+                                    <div className="flex justify-end gap-3">
+                                        <button type="button" onClick={() => setSelectedRequestForReturn(null)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200">ยกเลิก</button>
+                                        <button type="submit" className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 shadow-md">ยืนยันการคืนคำขอ</button>
+                                    </div>
+                                </form>
                             </div>
-                        `;
-                        return [iso, req.province, req.budget, tooltipHtml];
-                    }).filter(Boolean);
+                        </div>
+                    )}
 
-                    dataTable.addRows(rows);
-
-                    const options = {
-                        region: 'TH',
-                        resolution: 'provinces',
-                        displayMode: 'regions',
-                        colorAxis: {colors: ['#f3e8ff', '#d8b4fe', '#9333ea', '#581c87']}, // Brand light to dark purple
-                        backgroundColor: 'transparent',
-                        datalessRegionColor: '#f8fafc',
-                        defaultColor: '#e2e8f0',
-                        tooltip: { isHtml: true, trigger: 'focus' },
-                        legend: 'none'
-                    };
-
-                    const chart = new google.visualization.GeoChart(chartRef.current);
-                    chart.draw(dataTable, options);
-                };
-
-                // Load Google Charts if not already loaded, then draw
-                if (!google.visualization || !google.visualization.GeoChart) {
-                    google.charts.load('current', { 'packages': ['geochart'] });
-                    google.charts.setOnLoadCallback(drawChart);
-                } else {
-                    drawChart();
-                }
-
-                const handleResize = () => drawChart();
-                window.addEventListener('resize', handleResize);
-                return () => window.removeEventListener('resize', handleResize);
-
-            }, [requests]);
-
-            return (
-                <div className="w-full h-full min-h-[400px] flex items-center justify-center relative bg-slate-50/50 rounded-xl">
-                    <div ref={chartRef} className="w-full h-full absolute inset-0"></div>
+                    {/* Attachments Modal */}
+                    {attachmentModalReq && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
+                                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center text-brand-700">
+                                        <i className="fas fa-paperclip mr-2"></i> เอกสารแนบคำขอ (สอจ. {attachmentModalReq.province})
+                                    </h3>
+                                    <button onClick={() => setAttachmentModalReq(null)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-lg"></i></button>
+                                </div>
+                                <div className="space-y-3 mb-6">
+                                    {attachmentModalReq.attachments.map((file, idx) => (
+                                        <div key={idx} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                            <div className="flex items-center gap-3">
+                                                <i className="fas fa-file-pdf text-red-500 text-xl"></i>
+                                                <span className="text-sm font-medium text-slate-700">{file}</span>
+                                            </div>
+                                            <button onClick={() => showToast(`เริ่มการดาวน์โหลด: ${file}`)} className="text-xs font-semibold text-brand-600 hover:underline flex items-center gap-1">
+                                                <i className="fas fa-download"></i> ดาวน์โหลด
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-end">
+                                    <button onClick={() => setAttachmentModalReq(null)} className="px-5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">ปิด</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
 
-        const Dashboard = ({ requests }) => {
+        const Dashboard = ({ requests, currentRole, userProvince, onApproveAll }) => {
             const chartRefPie = useRef(null);
             const chartRefBar = useRef(null);
 
-            const totalBudget = requests.reduce((sum, req) => sum + Number(req.budget), 0);
-            
-            // Group by Category
-            const byCategory = requests.reduce((acc, req) => {
-                const cat = getCategoryFromType(req.type);
-                acc[cat] = (acc[cat] || 0) + Number(req.budget);
-                return acc;
-            }, {});
+            const displayRequests = currentRole === ROLES.OPERATOR.id 
+                ? requests.filter(r => r.province === userProvince) 
+                : requests;
 
-            // Group by Region
-            const byRegion = requests.reduce((acc, req) => {
-                const region = getRegion(req.province);
-                acc[region] = (acc[region] || 0) + Number(req.budget);
-                return acc;
-            }, {});
+            const totalBudget = displayRequests.reduce((sum, req) => sum + Number(req.budget), 0);
+            
+            const statusCounts = {
+                submitted: displayRequests.filter(r => r.status === 'submitted').length,
+                returned: displayRequests.filter(r => r.status === 'returned').length,
+                reviewed: displayRequests.filter(r => r.status === 'reviewed').length,
+                approved: displayRequests.filter(r => r.status === 'approved').length,
+            };
 
             useEffect(() => {
-                let pieChart, barChart;
-                Chart.defaults.font.family = 'Sarabun';
-                Chart.defaults.color = '#64748b';
+                let pieInstance = null;
+                let barInstance = null;
 
                 if (chartRefPie.current) {
                     const ctxPie = chartRefPie.current.getContext('2d');
-                    pieChart = new Chart(ctxPie, {
+                    if (chartRefPie.current._chartInstance) {
+                        chartRefPie.current._chartInstance.destroy();
+                    }
+
+                    const catMap = {};
+                    displayRequests.forEach(r => {
+                        const cat = getCategoryFromType(r.type);
+                        catMap[cat] = (catMap[cat] || 0) + Number(r.budget);
+                    });
+
+                    pieInstance = new Chart(ctxPie, {
                         type: 'doughnut',
                         data: {
-                            labels: Object.keys(byCategory),
+                            labels: Object.keys(catMap),
                             datasets: [{
-                                data: Object.values(byCategory),
-                                backgroundColor: ['#9333ea', '#3b82f6', '#10b981', '#f59e0b'],
-                                borderWidth: 0,
-                                hoverOffset: 4
+                                data: Object.values(catMap),
+                                backgroundColor: ['#9333ea', '#3b82f6', '#10b981', '#f59e0b', '#64748b']
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            cutout: '70%',
                             plugins: {
-                                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
-                                tooltip: {
-                                    backgroundColor: 'rgba(255,255,255,0.95)',
-                                    titleColor: '#1e293b',
-                                    bodyColor: '#334155',
-                                    borderColor: '#e2e8f0',
-                                    borderWidth: 1,
-                                    padding: 12,
-                                    callbacks: { label: (context) => ' ' + formatCurrency(context.raw) }
-                                }
+                                legend: { position: 'bottom', labels: { font: { family: 'Sarabun', size: 11 } } }
                             }
                         }
                     });
+                    chartRefPie.current._chartInstance = pieInstance;
                 }
 
                 if (chartRefBar.current) {
                     const ctxBar = chartRefBar.current.getContext('2d');
-                    barChart = new Chart(ctxBar, {
+                    if (chartRefBar.current._chartInstance) {
+                        chartRefBar.current._chartInstance.destroy();
+                    }
+
+                    const provMap = {};
+                    displayRequests.forEach(r => {
+                        provMap[r.province] = (provMap[r.province] || 0) + Number(r.budget);
+                    });
+                    const topProvinces = Object.entries(provMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+                    barInstance = new Chart(ctxBar, {
                         type: 'bar',
                         data: {
-                            labels: Object.keys(byRegion),
+                            labels: topProvinces.map(p => p[0]),
                             datasets: [{
                                 label: 'งบประมาณ (บาท)',
-                                data: Object.values(byRegion),
-                                backgroundColor: '#a855f7',
-                                borderRadius: 6,
-                                barPercentage: 0.6
+                                data: topProvinces.map(p => p[1]),
+                                backgroundColor: '#7e22ce',
+                                borderRadius: 8
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            scales: {
-                                y: { border: { display: false }, grid: { color: '#f1f5f9' } },
-                                x: { border: { display: false }, grid: { display: false } }
-                            },
                             plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    backgroundColor: 'rgba(255,255,255,0.95)',
-                                    titleColor: '#1e293b',
-                                    bodyColor: '#334155',
-                                    borderColor: '#e2e8f0',
-                                    borderWidth: 1,
-                                    callbacks: { label: (context) => ' ' + formatCurrency(context.raw) }
-                                }
+                                legend: { display: false }
+                            },
+                            scales: {
+                                y: { ticks: { font: { family: 'Sarabun', size: 10 } } },
+                                x: { ticks: { font: { family: 'Sarabun', size: 11 } } }
                             }
                         }
                     });
+                    chartRefBar.current._chartInstance = barInstance;
                 }
 
                 return () => {
-                    if (pieChart) pieChart.destroy();
-                    if (barChart) barChart.destroy();
+                    if (pieInstance) pieInstance.destroy();
+                    if (barInstance) barInstance.destroy();
                 };
-            }, [requests]);
+            }, [displayRequests]);
 
             return (
-                <div className="space-y-6">
-                    {/* Top Stats Cards (Taskgo Style) */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 flex flex-col justify-center">
-                            <div className="flex items-center gap-4 mb-2">
-                                <div className="bg-brand-50 text-brand-600 p-3 rounded-xl">
-                                    <i className="fas fa-sack-dollar text-xl"></i>
-                                </div>
-                                <p className="text-slate-500 font-medium text-sm">มูลค่าคำขอรวมทั้งประเทศ</p>
+                <div className="space-y-6 animate-fade-in">
+                    {/* Header Summary Banner */}
+                    <div className="bg-gradient-to-r from-brand-900 via-brand-700 to-indigo-900 text-white rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md text-purple-200 border border-white/20 px-3 py-1 rounded-full text-xs font-semibold mb-2">
+                                <i className="fas fa-chart-line text-yellow-300"></i> Executive Overview
                             </div>
-                            <p className="text-3xl font-bold text-slate-800 font-inter tracking-tight">{formatCurrency(totalBudget)}</p>
-                        </div>
-                        
-                        <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 flex flex-col justify-center">
-                            <div className="flex items-center gap-4 mb-2">
-                                <div className="bg-blue-50 text-blue-600 p-3 rounded-xl">
-                                    <i className="fas fa-clipboard-check text-xl"></i>
-                                </div>
-                                <p className="text-slate-500 font-medium text-sm">จำนวนรายการที่เสนอ</p>
-                            </div>
-                            <p className="text-3xl font-bold text-slate-800 font-inter tracking-tight">{requests.length} <span className="text-base font-normal text-slate-500 font-sans">รายการ</span></p>
+                            <h2 className="text-2xl font-bold tracking-tight">
+                                {currentRole === ROLES.EXECUTIVE.id ? 'สรุปภาพรวมงบประมาณรายจังหวัด' : 'ภาพรวมระบบจัดทำคำของบประมาณ'}
+                            </h2>
+                            <p className="text-purple-200 text-xs mt-1">
+                                {currentRole === ROLES.OPERATOR.id 
+                                    ? `แสดงสถิติคำขอสำหรับ สำนักงานอุตสาหกรรมจังหวัด${userProvince}` 
+                                    : 'ภาพรวมคำขอจัดตั้งงบลงทุนทั่วประเทศ 76 จังหวัด + ส่วนกลาง'}
+                            </p>
                         </div>
 
-                        <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 flex flex-col justify-center">
-                            <div className="flex items-center gap-4 mb-2">
-                                <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl">
-                                    <i className="fas fa-map-marked-alt text-xl"></i>
-                                </div>
-                                <p className="text-slate-500 font-medium text-sm">ครอบคลุมพื้นที่</p>
+                        {currentRole === ROLES.EXECUTIVE.id && statusCounts.reviewed > 0 && (
+                            <button 
+                                onClick={onApproveAll}
+                                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-emerald-500/30 transition-all text-xs flex items-center gap-2"
+                            >
+                                <i className="fas fa-check-double text-sm"></i> อนุมัติคำขอที่ผ่านกลั่นกรองทั้งหมด ({statusCounts.reviewed})
+                            </button>
+                        )}
+                    </div>
+
+                    {/* KPI Stat Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-slate-500 text-xs font-semibold">งบประมาณรวมที่เสนอขอ</p>
+                                <p className="text-xl font-bold text-slate-800 font-inter mt-1">{formatCurrency(totalBudget)}</p>
+                                <p className="text-[11px] text-slate-400 mt-1"><i className="fas fa-list-check mr-1"></i>{displayRequests.length} รายการคำขอ</p>
                             </div>
-                            <p className="text-3xl font-bold text-slate-800 font-inter tracking-tight">{provincesList.length} <span className="text-base font-normal text-slate-500 font-sans">จังหวัด</span></p>
+                            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-brand-600 flex items-center justify-center text-xl">
+                                <i className="fas fa-vault"></i>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-slate-500 text-xs font-semibold">ยื่นคำขอแล้ว / รอตรวจทาน</p>
+                                <p className="text-2xl font-bold text-blue-600 font-inter mt-1">{statusCounts.submitted}</p>
+                                <p className="text-[11px] text-blue-500 mt-1"><i className="fas fa-clock mr-1"></i>รอกลุ่มงานงบประมาณ</p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                                <i className="fas fa-paper-plane"></i>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-slate-500 text-xs font-semibold">ผ่านการกลั่นกรองแล้ว</p>
+                                <p className="text-2xl font-bold text-purple-600 font-inter mt-1">{statusCounts.reviewed}</p>
+                                <p className="text-[11px] text-purple-500 mt-1"><i className="fas fa-user-tie mr-1"></i>รอเสนอผู้บริหารอนุมัติ</p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-brand-600 flex items-center justify-center text-xl">
+                                <i className="fas fa-check-double"></i>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-slate-500 text-xs font-semibold">อนุมัติแล้ว</p>
+                                <p className="text-2xl font-bold text-emerald-600 font-inter mt-1">{statusCounts.approved}</p>
+                                <p className="text-[11px] text-emerald-500 mt-1"><i className="fas fa-circle-check mr-1"></i>พร้อมจัดทำกรอบวงเงิน</p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                                <i className="fas fa-award"></i>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Charts & Map Section */}
+                    {/* Charts & Map Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Interactive Google Map (76 Provinces) */}
-                        <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 lg:col-span-2 flex flex-col">
-                            <div className="flex justify-between items-center mb-6">
+                        {/* Map Section */}
+                        <div className="lg:col-span-2 bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex flex-col">
+                            <div className="flex justify-between items-center mb-4">
                                 <div>
-                                    <h3 className="font-bold text-lg text-slate-800">แผนที่การกระจายตัวงบประมาณ</h3>
-                                    <p className="text-sm text-slate-500">แสดงข้อมูลครบถ้วนทั้ง 76 จังหวัด และกรุงเทพมหานคร</p>
+                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <i className="fas fa-map-location-dot text-brand-600"></i> แผนที่การกระจายตัวงบประมาณจำแนกตามจังหวัด
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">ความเข้มของสีแสดงถึงมูลค่างบประมาณที่ขอจัดตั้ง</p>
                                 </div>
                             </div>
-                            <div className="flex-1 min-h-[450px]">
-                                <ThailandMap requests={requests} />
+                            <div className="flex-1 bg-slate-50/50 rounded-xl p-2 border border-slate-100">
+                                <ThailandMap requests={displayRequests} />
                             </div>
                         </div>
 
-                        {/* Side panel for Pie Chart & Top List */}
-                        <div className="flex flex-col gap-6">
-                            <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 h-80 flex flex-col">
-                                <h3 className="font-bold text-lg text-slate-800 mb-4">สัดส่วนตามหมวดหมู่</h3>
-                                <div className="flex-1 relative">
+                        {/* Pie Chart & Bar Chart Column */}
+                        <div className="space-y-6 flex flex-col">
+                            <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex-1 flex flex-col">
+                                <h3 className="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                                    <i className="fas fa-chart-pie text-brand-600"></i> สัดส่วนงบตามหมวดหมู่
+                                </h3>
+                                <div className="h-52 w-full relative flex-1">
                                     <canvas ref={chartRefPie}></canvas>
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 flex-1 flex flex-col">
-                                <h3 className="font-bold text-lg text-slate-800 mb-4">ลำดับงบประมาณสูงสุด</h3>
-                                <div className="overflow-y-auto flex-1 pr-2 space-y-3">
-                                    {requests.slice(0, 5).map((req, index) => (
-                                        <div key={req.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-brand-200 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold font-inter ${index === 0 ? 'bg-amber-100 text-amber-600' : index === 1 ? 'bg-slate-200 text-slate-600' : index === 2 ? 'bg-orange-100 text-orange-600' : 'bg-brand-50 text-brand-600'}`}>
-                                                    {index + 1}
-                                                </div>
-                                                <div>
-                                                    <div className="font-semibold text-slate-700">{req.province}</div>
-                                                    <div className="text-xs text-slate-500">{getCategoryFromType(req.type)}</div>
-                                                </div>
-                                            </div>
-                                            <span className="font-bold font-inter text-slate-800">{new Intl.NumberFormat('th-TH', { notation: 'compact', maximumFractionDigits: 1 }).format(req.budget)}</span>
-                                        </div>
-                                    ))}
+                            <div className="bg-white rounded-2xl p-5 card-shadow border border-slate-100 flex-1 flex flex-col">
+                                <h3 className="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                                    <i className="fas fa-chart-column text-brand-600"></i> จังหวัดที่มีคำขอสูงสุด 6 อันดับ
+                                </h3>
+                                <div className="h-48 w-full relative flex-1">
+                                    <canvas ref={chartRefBar}></canvas>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Bar Chart Full Width */}
-                    <div className="bg-white rounded-2xl p-6 card-shadow border border-slate-100 h-96 flex flex-col">
-                        <h3 className="font-bold text-lg text-slate-800 mb-4">สรุปงบประมาณตามภูมิภาค</h3>
-                        <div className="flex-1 relative">
-                            <canvas ref={chartRefBar}></canvas>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        const RequestForm = ({ onSubmit, onCancel }) => {
+        const AssetStatusView = ({ assets, currentRole, userProvince, onAddNew, onEdit, onDelete }) => {
+            const [filterProvince, setFilterProvince] = useState(currentRole === ROLES.OPERATOR.id ? userProvince : '');
+            const [filterCategory, setFilterCategory] = useState('');
+            const [filterLevel, setFilterLevel] = useState('');
+            const [searchTerm, setSearchTerm] = useState('');
+
+            useEffect(() => {
+                if (currentRole === ROLES.OPERATOR.id) {
+                    setFilterProvince(userProvince);
+                }
+            }, [currentRole, userProvince]);
+
+            const filteredAssets = assets.filter(item => {
+                const matchProvince = !filterProvince || item.province === filterProvince;
+                const matchCat = !filterCategory || item.category === filterCategory;
+                const matchLevel = !filterLevel || item.level === filterLevel;
+                const matchSearch = !searchTerm || item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.province.includes(searchTerm);
+                return matchProvince && matchCat && matchLevel && matchSearch;
+            });
+
+            // Calculate aggregate stats
+            const totalQuantity = filteredAssets.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            const totalStaff = filteredAssets.reduce((sum, item) => sum + Number(item.staffCount || 0), 0);
+            const totalMaintCost = filteredAssets.reduce((sum, item) => sum + Number(item.maintenanceCost || 0), 0);
+            const totalUtilCost = filteredAssets.reduce((sum, item) => sum + Number(item.utilityCost || 0), 0);
+            const officeCount = filteredAssets.filter(i => i.category === 'อาคารสำนักงาน').reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            const housingCount = filteredAssets.filter(i => i.category === 'บ้านพักข้าราชการ').reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            const avgAge = filteredAssets.length > 0 
+                ? (filteredAssets.reduce((sum, item) => sum + Number(item.age || 0), 0) / filteredAssets.length).toFixed(1) 
+                : 0;
+
+            return (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Header Banner */}
+                    <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-brand-900 text-white rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <div className="inline-flex items-center gap-2 bg-purple-500/20 text-purple-200 border border-purple-400/30 px-3 py-1 rounded-full text-xs font-semibold mb-2">
+                                <i className="fas fa-building-circle-check text-purple-400"></i> Real-time Investment Asset Database
+                            </div>
+                            <h2 className="text-2xl font-bold tracking-tight">ภาพรวมและสถานะสิ่งปลูกสร้าง/งบลงทุน</h2>
+                            <p className="text-slate-300 text-xs mt-1">
+                                รายงานสถานะอาคารสำนักงาน บ้านพักข้าราชการ สิทธิประโยชน์พื้นที่ และค่าใช้จ่ายบำรุงรักษาต่อปี
+                                {currentRole === ROLES.OPERATOR.id && ` (สอจ. ${userProvince})`}
+                            </p>
+                        </div>
+                        
+                        {(currentRole === ROLES.OPERATOR.id || currentRole === ROLES.CENTRAL.id) && (
+                            <button 
+                                onClick={onAddNew}
+                                className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-purple-900/40 transition-all flex items-center gap-2"
+                            >
+                                <i className="fas fa-plus"></i> บันทึกเพิ่มสิ่งปลูกสร้าง
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Real-time KPI Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <div className="bg-white rounded-2xl p-4 card-shadow border border-slate-100">
+                            <p className="text-slate-500 text-xs font-semibold">จำนวนอาคาร/สิ่งปลูกสร้าง</p>
+                            <p className="text-2xl font-bold text-slate-800 font-inter mt-1">
+                                {totalQuantity} <span className="text-xs font-normal text-slate-400">หลัง</span>
+                            </p>
+                            <p className="text-[11px] text-purple-600 mt-1 font-medium">
+                                สำนักงาน {officeCount} | บ้านพัก {housingCount}
+                            </p>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-4 card-shadow border border-slate-100">
+                            <p className="text-slate-500 text-xs font-semibold">จำนวนผู้ใช้/เจ้าหน้าที่</p>
+                            <p className="text-2xl font-bold text-blue-600 font-inter mt-1">
+                                {totalStaff} <span className="text-xs font-normal text-slate-400">คน</span>
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1"><i className="fas fa-users mr-1"></i>กำลังปฏิบัติงาน</p>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-4 card-shadow border border-slate-100">
+                            <p className="text-slate-500 text-xs font-semibold">อายุอาคารเฉลี่ย</p>
+                            <p className="text-2xl font-bold text-amber-600 font-inter mt-1">
+                                {avgAge} <span className="text-xs font-normal text-slate-400">ปี</span>
+                            </p>
+                            <p className="text-[11px] text-amber-600 mt-1"><i className="fas fa-wrench mr-1"></i>เฉลี่ยรายรายการ</p>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-4 card-shadow border border-slate-100">
+                            <p className="text-slate-500 text-xs font-semibold">ค่าบำรุงรักษา/ซ่อมแซมต่อปี</p>
+                            <p className="text-lg font-bold text-emerald-600 font-inter mt-1">
+                                {formatCurrency(totalMaintCost)}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1"><i className="fas fa-calculator mr-1"></i>ประมาณการประจำปี</p>
+                        </div>
+
+                        <div className="bg-white rounded-2xl p-4 card-shadow border border-slate-100">
+                            <p className="text-slate-500 text-xs font-semibold">ค่าสาธารณูปโภคต่อปี</p>
+                            <p className="text-lg font-bold text-indigo-600 font-inter mt-1">
+                                {formatCurrency(totalUtilCost)}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1"><i className="fas fa-bolt mr-1"></i>ค่าน้ำ-ค่าไฟ-การสื่อสาร</p>
+                        </div>
+                    </div>
+
+                    {/* Filter and Table Container */}
+                    <div className="bg-white rounded-2xl card-shadow border border-slate-100 overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                            <div className="flex items-center gap-2 w-full md:w-auto">
+                                <i className="fas fa-filter text-purple-600"></i>
+                                <h3 className="font-bold text-slate-800 text-sm">ค้นหาและกรองข้อมูล</h3>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                                <input 
+                                    type="text" 
+                                    placeholder="ค้นหาชื่ออาคาร/สถานที่..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="input-field px-3 py-1.5 rounded-xl text-xs font-medium w-full md:w-48"
+                                />
+
+                                {currentRole !== ROLES.OPERATOR.id && (
+                                    <select 
+                                        value={filterProvince} 
+                                        onChange={(e) => setFilterProvince(e.target.value)}
+                                        className="input-field px-3 py-1.5 rounded-xl text-xs font-medium"
+                                    >
+                                        <option value="">ทุกจังหวัด (76 จังหวัด)</option>
+                                        {provincesList.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                )}
+
+                                <select 
+                                    value={filterCategory} 
+                                    onChange={(e) => setFilterCategory(e.target.value)}
+                                    className="input-field px-3 py-1.5 rounded-xl text-xs font-medium"
+                                >
+                                    <option value="">ทุกประเภทอาคาร</option>
+                                    <option value="อาคารสำนักงาน">อาคารสำนักงาน</option>
+                                    <option value="บ้านพักข้าราชการ">บ้านพักข้าราชการ</option>
+                                    <option value="อาคารประกอบ/อื่นๆ">อาคารประกอบ/อื่นๆ</option>
+                                </select>
+
+                                <select 
+                                    value={filterLevel} 
+                                    onChange={(e) => setFilterLevel(e.target.value)}
+                                    className="input-field px-3 py-1.5 rounded-xl text-xs font-medium"
+                                >
+                                    <option value="">ทุกระดับตำแหน่ง</option>
+                                    <option value="ระดับ 1-2">ระดับ 1-2</option>
+                                    <option value="ระดับ 3-4">ระดับ 3-4</option>
+                                    <option value="ระดับ 5-6">ระดับ 5-6</option>
+                                    <option value="ระดับ 7-8">ระดับ 7-8</option>
+                                    <option value="ระดับ 9 ขึ้นไป">ระดับ 9 ขึ้นไป / ชั้นโท</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Data Table */}
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-left border-collapse">
+                                <thead className="bg-slate-100 text-slate-600 border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-4 py-3 font-semibold text-xs">จังหวัด</th>
+                                        <th className="px-4 py-3 font-semibold text-xs">ประเภท / รายการอาคาร</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-center">ระดับ</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-center">จำนวน (หลัง)</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-center">อายุ (ปี)</th>
+                                        <th className="px-4 py-3 font-semibold text-xs">สิทธิของพื้นที่ / ขนาด</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-center">เจ้าหน้าที่ (คน)</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-right">ค่าบำรุงรักษา/ซ่อมต่อปี</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-right">ค่าสาธารณูปโภคต่อปี</th>
+                                        <th className="px-4 py-3 font-semibold text-xs text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                    {filteredAssets.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="10" className="text-center py-8 text-slate-400 text-xs">
+                                                ไม่พบข้อมูลรายการอาคารหรือสิ่งปลูกสร้างตามเงื่อนไขที่เลือก
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredAssets.map(item => (
+                                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-4 py-3 text-xs font-bold text-slate-800">
+                                                    {item.province}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="font-semibold text-xs text-slate-800">{item.name}</div>
+                                                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-md mt-1 font-medium ${
+                                                        item.category === 'อาคารสำนักงาน' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                                        item.category === 'บ้านพักข้าราชการ' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                                        'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        {item.category}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {item.level && item.level !== '-' ? (
+                                                        <span className="px-2 py-0.5 rounded text-[11px] bg-amber-50 text-amber-800 font-semibold border border-amber-200">
+                                                            {item.level}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400 text-xs">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-bold text-xs text-slate-700 font-inter">
+                                                    {item.quantity}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-bold font-inter ${
+                                                        item.age >= 30 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-800'
+                                                    }`}>
+                                                        {item.age} ปี
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs">
+                                                    <div className="font-medium text-slate-700">{item.landRights}</div>
+                                                    <div className="text-[10px] text-slate-400">เนื้อที่: {item.areaSize || '-'}</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-semibold text-xs text-slate-700 font-inter">
+                                                    {item.staffCount || 0}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-xs text-slate-800 font-inter">
+                                                    {new Intl.NumberFormat('th-TH').format(item.maintenanceCost)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-xs text-slate-800 font-inter">
+                                                    {new Intl.NumberFormat('th-TH').format(item.utilityCost)}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {(currentRole === ROLES.CENTRAL.id || (currentRole === ROLES.OPERATOR.id && item.province === userProvince)) ? (
+                                                        <div className="flex justify-center items-center gap-1">
+                                                            <button 
+                                                                onClick={() => onEdit(item)}
+                                                                className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg text-xs"
+                                                                title="แก้ไข"
+                                                            >
+                                                                <i className="fas fa-pen"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => onDelete(item.id)}
+                                                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-lg text-xs"
+                                                                title="ลบ"
+                                                            >
+                                                                <i className="fas fa-trash-can"></i>
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300 text-xs"><i className="fas fa-lock"></i></span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Footer Summary */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center text-xs gap-2">
+                            <span className="text-slate-500">แสดงข้อมูลสิ่งปลูกสร้าง {filteredAssets.length} รายการ</span>
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <span className="text-slate-500 mr-2">รวมค่าซ่อมแซมต่อปี:</span>
+                                    <span className="font-bold text-emerald-700 font-inter">{formatCurrency(totalMaintCost)}</span>
+                                </div>
+                                <div>
+                                    <span className="text-slate-500 mr-2">รวมค่าสาธารณูปโภคต่อปี:</span>
+                                    <span className="font-bold text-indigo-700 font-inter">{formatCurrency(totalUtilCost)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AssetFormModal = ({ asset, userProvince, currentRole, onSave, onClose }) => {
+            const [form, setForm] = useState(asset || {
+                province: currentRole === ROLES.OPERATOR.id ? userProvince : 'เชียงใหม่',
+                name: '',
+                category: 'อาคารสำนักงาน',
+                level: '-',
+                quantity: 1,
+                age: 10,
+                landRights: 'ที่ราชพัสดุ',
+                areaSize: '1-0-0 ไร่',
+                staffCount: 10,
+                maintenanceCost: 10000,
+                utilityCost: 100000
+            });
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSave({
+                    ...form,
+                    quantity: Number(form.quantity),
+                    age: Number(form.age),
+                    staffCount: Number(form.staffCount),
+                    maintenanceCost: Number(form.maintenanceCost),
+                    utilityCost: Number(form.utilityCost)
+                });
+            };
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto animate-fade-in">
+                        <div className="flex justify-between items-center mb-4 border-b pb-3">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <i className="fas fa-building text-brand-600"></i>
+                                {asset ? 'แก้ไขข้อมูลอาคาร/สิ่งปลูกสร้าง' : 'บันทึกอาคาร/สิ่งปลูกสร้างใหม่'}
+                            </h3>
+                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times text-lg"></i></button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">จังหวัด</label>
+                                    {currentRole === ROLES.OPERATOR.id ? (
+                                        <input type="text" readOnly value={userProvince} className="w-full input-field rounded-xl p-2.5 text-xs bg-slate-100 font-bold" />
+                                    ) : (
+                                        <select 
+                                            value={form.province} 
+                                            onChange={e => setForm({...form, province: e.target.value})} 
+                                            className="w-full input-field rounded-xl p-2.5 text-xs"
+                                        >
+                                            {provincesList.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ประเภทอาคาร/สิ่งปลูกสร้าง <span className="text-red-500">*</span></label>
+                                    <select 
+                                        value={form.category} 
+                                        onChange={e => setForm({...form, category: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs"
+                                    >
+                                        <option value="อาคารสำนักงาน">อาคารสำนักงาน</option>
+                                        <option value="บ้านพักข้าราชการ">บ้านพักข้าราชการ</option>
+                                        <option value="อาคารประกอบ/อื่นๆ">อาคารประกอบ/อื่นๆ</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">ชื่อรายการ / อาคาร / เลขที่ <span className="text-red-500">*</span></label>
+                                <input 
+                                    required 
+                                    type="text" 
+                                    placeholder="เช่น อาคารสำนักงาน สอจ., บ้านพักข้าราชการ เลขที่ 196/3"
+                                    value={form.name} 
+                                    onChange={e => setForm({...form, name: e.target.value})} 
+                                    className="w-full input-field rounded-xl p-2.5 text-xs"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ระดับตำแหน่ง (กรณีบ้านพัก)</label>
+                                    <select 
+                                        value={form.level} 
+                                        onChange={e => setForm({...form, level: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs"
+                                    >
+                                        <option value="-">- (ไม่ใช่บ้านพัก)</option>
+                                        <option value="ระดับ 1-2">ระดับ 1-2</option>
+                                        <option value="ระดับ 3-4">ระดับ 3-4</option>
+                                        <option value="ระดับ 5-6">ระดับ 5-6</option>
+                                        <option value="ระดับ 7-8">ระดับ 7-8</option>
+                                        <option value="ระดับ 9 ขึ้นไป">ระดับ 9 ขึ้นไป / ชั้นโท</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">จำนวน (หลัง/หน่วย) <span className="text-red-500">*</span></label>
+                                    <input 
+                                        required 
+                                        type="number" 
+                                        min="1" 
+                                        value={form.quantity} 
+                                        onChange={e => setForm({...form, quantity: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs font-inter"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">อายุอาคาร (ปี) <span className="text-red-500">*</span></label>
+                                    <input 
+                                        required 
+                                        type="number" 
+                                        min="0" 
+                                        value={form.age} 
+                                        onChange={e => setForm({...form, age: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs font-inter"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">สิทธิการใช้ประโยชน์พื้นที่ <span className="text-red-500">*</span></label>
+                                    <input 
+                                        required 
+                                        type="text" 
+                                        placeholder="เช่น ที่ราชพัสดุ, ป่าสงวนแห่งชาติ, ที่สาธารณประโยชน์"
+                                        value={form.landRights} 
+                                        onChange={e => setForm({...form, landRights: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ขนาดพื้นที่ (เนื้อที่ / ตร.ม.)</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="เช่น 2-1-15 ไร่ หรือ 350 ตร.ม."
+                                        value={form.areaSize} 
+                                        onChange={e => setForm({...form, areaSize: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">จำนวนผู้ปฏิบัติงาน (คน)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        value={form.staffCount} 
+                                        onChange={e => setForm({...form, staffCount: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs font-inter"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ค่าซ่อมแซมต่อปี (บาท)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        value={form.maintenanceCost} 
+                                        onChange={e => setForm({...form, maintenanceCost: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs font-inter"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">ค่าสาธารณูปโภคต่อปี (บาท)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        value={form.utilityCost} 
+                                        onChange={e => setForm({...form, utilityCost: e.target.value})} 
+                                        className="w-full input-field rounded-xl p-2.5 text-xs font-inter"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200">
+                                    ยกเลิก
+                                </button>
+                                <button type="submit" className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-md">
+                                    บันทึกข้อมูล
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const RequestForm = ({ onSubmit, onCancel, userProvince }) => {
             const [formData, setFormData] = useState({
-                province: '', coordinator: '', mainCategory: mainCategories[0], type: subTypes[mainCategories[0]][0],
-                item: '', details: '', budget: '', reason: ''
+                province: userProvince, 
+                coordinator: `เจ้าหน้าที่ สอจ. ${userProvince}`, 
+                mainCategory: mainCategories[0], 
+                type: subTypes[mainCategories[0]][0],
+                item: '', details: '', budget: '', reason: '',
+                attachments: ['เอกสารขอตั้งงบประมาณ.pdf']
             });
 
             const handleCatChange = (e) => {
@@ -530,71 +1281,81 @@
 
             return (
                 <div className="max-w-4xl mx-auto bg-white rounded-2xl card-shadow border border-slate-100 overflow-hidden">
-                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-6">
-                        <h2 className="text-xl font-bold text-slate-800 flex items-center">
-                            <div className="bg-brand-100 text-brand-600 p-2 rounded-lg mr-3">
-                                <i className="fas fa-edit"></i>
-                            </div>
-                            แบบฟอร์มจัดทำคำของบประมาณ
-                        </h2>
-                        <p className="text-slate-500 text-sm mt-2 ml-11">กรอกข้อมูลโครงการและงบประมาณเพื่อส่งเข้าสู่ระบบส่วนกลาง</p>
+                    <div className="bg-slate-50 border-b border-slate-200 px-8 py-5 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center">
+                                <div className="bg-brand-100 text-brand-600 p-2 rounded-lg mr-3 text-sm">
+                                    <i className="fas fa-edit"></i>
+                                </div>
+                                แบบฟอร์มจัดทำคำของบประมาณ (สอจ. {userProvince})
+                            </h2>
+                            <p className="text-slate-500 text-xs mt-1">กรอกข้อมูลและแนบเอกสารเพื่อส่งให้ส่วนกลางตรวจทาน</p>
+                        </div>
+                        <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">
+                            ระดับปฏิบัติการ
+                        </span>
                     </div>
                     
-                    <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                    <form onSubmit={handleSubmit} className="p-8 space-y-6">
                         <div>
-                            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b border-slate-100 pb-2">1. ข้อมูลหน่วยงาน</h3>
+                            <h3 className="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">1. ข้อมูลหน่วยงาน</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">จังหวัด <span className="text-red-500">*</span></label>
-                                    <select required name="province" value={formData.province} onChange={(e) => setFormData({...formData, province: e.target.value})} className="w-full rounded-xl input-field px-4 py-3">
-                                        <option value="">-- เลือกจังหวัด --</option>
-                                        {provincesList.map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">จังหวัดที่รับผิดชอบ</label>
+                                    <input type="text" readOnly value={userProvince} className="w-full rounded-xl input-field px-4 py-2.5 bg-slate-100 text-slate-500 font-bold" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">ผู้ประสานงาน <span className="text-red-500">*</span></label>
-                                    <input required type="text" value={formData.coordinator} onChange={(e) => setFormData({...formData, coordinator: e.target.value})} placeholder="ชื่อ-สกุล เบอร์โทร" className="w-full rounded-xl input-field px-4 py-3" />
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">ผู้ประสานงาน <span className="text-red-500">*</span></label>
+                                    <input required type="text" value={formData.coordinator} onChange={(e) => setFormData({...formData, coordinator: e.target.value})} placeholder="ชื่อ-สกุล เบอร์โทร" className="w-full rounded-xl input-field px-4 py-2.5" />
                                 </div>
                             </div>
                         </div>
 
                         <div>
-                            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b border-slate-100 pb-2">2. รายละเอียดคำขอ</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <h3 className="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">2. รายละเอียดรายการคำขอ</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">หมวดหมู่หลัก <span className="text-red-500">*</span></label>
-                                    <select value={formData.mainCategory} onChange={handleCatChange} className="w-full rounded-xl input-field px-4 py-3">
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">หมวดหมู่หลัก <span className="text-red-500">*</span></label>
+                                    <select value={formData.mainCategory} onChange={handleCatChange} className="w-full rounded-xl input-field px-4 py-2.5">
                                         {mainCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">ประเภทย่อย <span className="text-red-500">*</span></label>
-                                    <select value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})} className="w-full rounded-xl input-field px-4 py-3">
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">ประเภทย่อย <span className="text-red-500">*</span></label>
+                                    <select value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})} className="w-full rounded-xl input-field px-4 py-2.5">
                                         {subTypes[formData.mainCategory].map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
                                 </div>
                             </div>
                             
-                            <div className="space-y-6">
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">รายการขอตั้งงบ <span className="text-red-500">*</span></label>
-                                    <input required type="text" value={formData.item} onChange={(e) => setFormData({...formData, item: e.target.value})} placeholder="เช่น ก่อสร้างอาคารสำนักงานใหม่" className="w-full rounded-xl input-field px-4 py-3" />
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">รายการขอตั้งงบประมาณ <span className="text-red-500">*</span></label>
+                                    <input required type="text" value={formData.item} onChange={(e) => setFormData({...formData, item: e.target.value})} placeholder="เช่น ก่อสร้างอาคารที่ทำการใหม่ สอจ." className="w-full rounded-xl input-field px-4 py-2.5" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">งบประมาณ (บาท) <span className="text-red-500">*</span></label>
-                                    <input required type="number" min="0" value={formData.budget} onChange={(e) => setFormData({...formData, budget: e.target.value})} placeholder="ระบุตัวเลข" className="w-full rounded-xl input-field px-4 py-3 font-inter" />
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">งบประมาณที่เสนอขอ (บาท) <span className="text-red-500">*</span></label>
+                                    <input required type="number" min="0" value={formData.budget} onChange={(e) => setFormData({...formData, budget: e.target.value})} placeholder="ระบุวงเงินคำขอ" className="w-full rounded-xl input-field px-4 py-2.5 font-inter" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-600 mb-2">เหตุผลความจำเป็น <span className="text-red-500">*</span></label>
-                                    <textarea required rows="3" value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} placeholder="อธิบายความจำเป็นในการของบประมาณ" className="w-full rounded-xl input-field px-4 py-3"></textarea>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">เหตุผลความจำเป็นและคำชี้แจง <span className="text-red-500">*</span></label>
+                                    <textarea required rows="3" value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} placeholder="ระบุความจำเป็นเร่งด่วน ประโยชน์ที่คาดว่าจะได้รับ..." className="w-full rounded-xl input-field px-4 py-2.5 text-sm"></textarea>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">แนบเอกสารประกอบ (PDF / ZIP)</label>
+                                    <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                                        <i className="fas fa-cloud-arrow-up text-brand-600 text-2xl mb-1"></i>
+                                        <p className="text-xs text-slate-600 font-semibold">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่</p>
+                                        <p className="text-[10px] text-slate-400 mt-1">แบบแปลน, แบบประมาณราคา, ภาพถ่ายพื้นที่ (ขนาดไม่เกิน 25MB)</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-4 pt-6 border-t border-slate-100">
-                            <button type="button" onClick={onCancel} className="px-6 py-3 rounded-xl font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-all">ยกเลิก</button>
-                            <button type="submit" className="px-6 py-3 rounded-xl font-medium text-white bg-brand-600 hover:bg-brand-700 shadow-md shadow-brand-500/30 transition-all flex items-center">
-                                บันทึกและส่งคำขอ <i className="fas fa-arrow-right ml-2"></i>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl font-medium text-xs text-slate-600 bg-white border border-slate-300 hover:bg-slate-50">ยกเลิก</button>
+                            <button type="submit" className="px-5 py-2.5 rounded-xl font-medium text-xs text-white bg-brand-600 hover:bg-brand-700 shadow-md shadow-brand-500/30 flex items-center">
+                                บันทึกและส่งคำขอให้ส่วนกลาง <i className="fas fa-arrow-right ml-2"></i>
                             </button>
                         </div>
                     </form>
@@ -602,38 +1363,72 @@
             );
         };
 
-        const RequestList = ({ requests }) => {
+        const RequestList = ({ requests, currentRole, userProvince, onUpdateStatus, onRequestReturn, onViewAttachments }) => {
             const [filterRegion, setFilterRegion] = useState('');
             const [filterCat, setFilterCat] = useState('');
+            const [filterStatus, setFilterStatus] = useState('');
 
-            const filtered = requests.filter(r => {
+            let accessibleRequests = requests;
+            if (currentRole === ROLES.OPERATOR.id) {
+                accessibleRequests = requests.filter(r => r.province === userProvince);
+            }
+
+            const filtered = accessibleRequests.filter(r => {
                 const matchRegion = filterRegion === '' || getRegion(r.province) === filterRegion;
                 const matchCat = filterCat === '' || getCategoryFromType(r.type) === filterCat;
-                return matchRegion && matchCat;
+                const matchStatus = filterStatus === '' || r.status === filterStatus;
+                return matchRegion && matchCat && matchStatus;
             });
 
+            const getStatusBadge = (status) => {
+                switch (status) {
+                    case 'submitted':
+                        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 border border-blue-200"><i className="fas fa-paper-plane mr-1"></i>ยื่นคำขอแล้ว</span>;
+                    case 'returned':
+                        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300"><i className="fas fa-rotate-left mr-1"></i>ส่งกลับแก้ไข</span>;
+                    case 'reviewed':
+                        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200"><i className="fas fa-check-double mr-1"></i>ผ่านการกลั่นกรอง</span>;
+                    case 'approved':
+                        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"><i className="fas fa-circle-check mr-1"></i>อนุมัติแล้ว</span>;
+                    default:
+                        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">ร่างคำขอ</span>;
+                }
+            };
+
             return (
-                <div className="bg-white rounded-2xl card-shadow border border-slate-100 flex flex-col h-[calc(100vh-160px)]">
-                    <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <h2 className="text-xl font-bold text-slate-800 flex items-center">
-                            <div className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3">
-                                <i className="fas fa-database"></i>
-                            </div>
-                            ฐานข้อมูลคำของบประมาณ
-                        </h2>
-                        <div className="flex gap-3 w-full sm:w-auto">
-                            <select value={filterRegion} onChange={e => setFilterRegion(e.target.value)} className="input-field px-4 py-2 rounded-xl text-sm w-full sm:w-40 font-medium">
-                                <option value="">ทุกภูมิภาค</option>
-                                <option value="ภาคเหนือ">ภาคเหนือ</option>
-                                <option value="ภาคกลาง">ภาคกลาง</option>
-                                <option value="ภาคตะวันออกเฉียงเหนือ">ภาคอีสาน</option>
-                                <option value="ภาคตะวันออก">ภาคตะวันออก</option>
-                                <option value="ภาคตะวันตก">ภาคตะวันตก</option>
-                                <option value="ภาคใต้">ภาคใต้</option>
-                            </select>
-                            <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="input-field px-4 py-2 rounded-xl text-sm w-full sm:w-40 font-medium">
+                <div className="bg-white rounded-2xl card-shadow border border-slate-100 flex flex-col h-[calc(100vh-170px)]">
+                    <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center">
+                                <div className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-2.5 text-sm">
+                                    <i className="fas fa-database"></i>
+                                </div>
+                                ฐานข้อมูลคำของบประมาณ
+                                {currentRole === ROLES.OPERATOR.id && <span className="ml-2 text-xs font-normal text-slate-500">(สอจ. {userProvince})</span>}
+                            </h2>
+                        </div>
+                        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                            {currentRole !== ROLES.OPERATOR.id && (
+                                <select value={filterRegion} onChange={e => setFilterRegion(e.target.value)} className="input-field px-3 py-1.5 rounded-xl text-xs font-medium">
+                                    <option value="">ทุกภูมิภาค</option>
+                                    <option value="ภาคเหนือ">ภาคเหนือ</option>
+                                    <option value="ภาคกลาง">ภาคกลาง</option>
+                                    <option value="ภาคตะวันออกเฉียงเหนือ">ภาคอีสาน</option>
+                                    <option value="ภาคตะวันออก">ภาคตะวันออก</option>
+                                    <option value="ภาคตะวันตก">ภาคตะวันตก</option>
+                                    <option value="ภาคใต้">ภาคใต้</option>
+                                </select>
+                            )}
+                            <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="input-field px-3 py-1.5 rounded-xl text-xs font-medium">
                                 <option value="">ทุกหมวดหมู่</option>
                                 {mainCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field px-3 py-1.5 rounded-xl text-xs font-medium">
+                                <option value="">ทุกสถานะ</option>
+                                <option value="submitted">ยื่นคำขอแล้ว</option>
+                                <option value="returned">ส่งกลับแก้ไข</option>
+                                <option value="reviewed">ผ่านการกลั่นกรอง</option>
+                                <option value="approved">อนุมัติแล้ว</option>
                             </select>
                         </div>
                     </div>
@@ -642,52 +1437,102 @@
                         <table className="min-w-full text-left border-collapse">
                             <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10 shadow-sm border-b border-slate-200">
                                 <tr>
-                                    <th className="px-6 py-4 font-semibold text-sm">จังหวัด</th>
-                                    <th className="px-6 py-4 font-semibold text-sm">หมวดหมู่</th>
-                                    <th className="px-6 py-4 font-semibold text-sm">รายการ</th>
-                                    <th className="px-6 py-4 font-semibold text-sm text-right">งบประมาณ (บาท)</th>
-                                    <th className="px-6 py-4 font-semibold text-sm text-center">จัดการ</th>
+                                    <th className="px-5 py-3 font-semibold text-xs">จังหวัด / หน่วยงาน</th>
+                                    <th className="px-5 py-3 font-semibold text-xs">หมวดหมู่</th>
+                                    <th className="px-5 py-3 font-semibold text-xs">รายการคำขอ</th>
+                                    <th className="px-5 py-3 font-semibold text-xs text-right">งบประมาณ (บาท)</th>
+                                    <th className="px-5 py-3 font-semibold text-xs text-center">สถานะ</th>
+                                    <th className="px-5 py-3 font-semibold text-xs text-center">การดำเนินการตามสิทธิ์</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
                                 {filtered.map(req => (
                                     <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-semibold text-slate-800">{req.province}</div>
-                                            <div className="text-xs text-slate-500 mt-1">{getRegion(req.province)}</div>
+                                        <td className="px-5 py-3.5">
+                                            <div className="font-bold text-xs text-slate-800">{req.province}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">{getRegion(req.province)}</div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-3 py-1 rounded-md text-xs font-medium bg-brand-50 text-brand-700 border border-brand-100 inline-block">
+                                        <td className="px-5 py-3.5">
+                                            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-100 inline-block">
                                                 {getCategoryFromType(req.type)}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-slate-700">{req.item}</div>
+                                        <td className="px-5 py-3.5 max-w-xs">
+                                            <div className="text-xs font-semibold text-slate-800">{req.item}</div>
+                                            {req.status === 'returned' && req.revisionNote && (
+                                                <div className="text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200 mt-1">
+                                                    <strong>ข้อเสนอแนะ:</strong> {req.revisionNote}
+                                                </div>
+                                            )}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-slate-800 font-inter">
+                                        <td className="px-5 py-3.5 text-right font-bold text-xs text-slate-800 font-inter">
                                             {new Intl.NumberFormat('th-TH').format(req.budget)}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button className="text-slate-400 hover:text-brand-600 transition-colors mx-1 p-2 rounded-lg hover:bg-brand-50" title="ดูรายละเอียด"><i className="fas fa-eye"></i></button>
-                                            <button className="text-slate-400 hover:text-blue-600 transition-colors mx-1 p-2 rounded-lg hover:bg-blue-50" title="เอกสารแนบ"><i className="fas fa-paperclip"></i></button>
+                                        <td className="px-5 py-3.5 text-center">
+                                            {getStatusBadge(req.status)}
+                                        </td>
+                                        <td className="px-5 py-3.5 text-center">
+                                            <div className="flex items-center justify-center gap-1.5">
+                                                <button onClick={() => onViewAttachments(req)} className="text-slate-500 hover:text-brand-600 p-1.5 rounded-lg hover:bg-slate-100 text-xs" title="ดูเอกสารแนบ">
+                                                    <i className="fas fa-paperclip"></i>
+                                                </button>
+
+                                                {currentRole === ROLES.OPERATOR.id && req.status === 'returned' && (
+                                                    <button 
+                                                        onClick={() => onUpdateStatus(req.id, 'submitted', '')}
+                                                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-1"
+                                                    >
+                                                        <i className="fas fa-paper-plane"></i> ยื่นแก้ไข
+                                                    </button>
+                                                )}
+
+                                                {currentRole === ROLES.CENTRAL.id && (
+                                                    <>
+                                                        {req.status === 'submitted' && (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => onUpdateStatus(req.id, 'reviewed')}
+                                                                    className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[11px] font-semibold"
+                                                                    title="ตรวจทานและส่งผู้บริหาร"
+                                                                >
+                                                                    <i className="fas fa-check mr-1"></i>ผ่านกลั่นกรอง
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => onRequestReturn(req)}
+                                                                    className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-semibold"
+                                                                    title="คืนให้ สอจ. แก้ไข"
+                                                                >
+                                                                    <i className="fas fa-rotate-left mr-1"></i>คืนแก้ไข
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {currentRole === ROLES.EXECUTIVE.id && (
+                                                    <>
+                                                        {req.status === 'reviewed' && (
+                                                            <button 
+                                                                onClick={() => onUpdateStatus(req.id, 'approved')}
+                                                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-sm"
+                                                            >
+                                                                <i className="fas fa-check-circle mr-1"></i>อนุมัติ
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
-                                {filtered.length === 0 && (
-                                    <tr>
-                                        <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
-                                            ไม่พบข้อมูลที่ตรงกับเงื่อนไข
-                                        </td>
-                                    </tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
-                    <div className="p-4 bg-white border-t border-slate-100 flex justify-between items-center">
-                        <span className="text-slate-500 text-sm">แสดง {filtered.length} รายการ</span>
+                    <div className="p-4 bg-white border-t border-slate-100 flex justify-between items-center text-xs">
+                        <span className="text-slate-500">แสดงข้อมูล {filtered.length} รายการ</span>
                         <div>
-                            <span className="text-slate-500 mr-3 text-sm">รวมงบประมาณที่แสดง:</span>
-                            <span className="text-xl font-bold text-brand-700 font-inter">{formatCurrency(filtered.reduce((s, r) => s + Number(r.budget), 0))}</span>
+                            <span className="text-slate-500 mr-2">รวมงบประมาณ:</span>
+                            <span className="text-base font-bold text-brand-700 font-inter">{formatCurrency(filtered.reduce((s, r) => s + Number(r.budget), 0))}</span>
                         </div>
                     </div>
                 </div>
