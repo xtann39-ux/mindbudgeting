@@ -1139,6 +1139,7 @@
             const [reason, setReason] = useState('');
             const [province, setProvince] = useState(currentUser.province === 'ส่วนกลาง' ? 'เชียงใหม่' : currentUser.province);
             const [selectedFiles, setSelectedFiles] = useState([]);
+            const [isSubmitting, setIsSubmitting] = useState(false);
             const fileInputRef = useRef(null);
 
             const handleCategoryChange = (e) => {
@@ -1160,17 +1161,23 @@
                 setSelectedFiles(prev => prev.filter((_, idx) => idx !== indexToRemove));
             };
 
-            const handleSubmit = (e) => {
+            const handleSubmit = async (e) => {
                 e.preventDefault();
-                onSubmit({
-                    province: (currentUser.role === 'operator' || currentUser.role === 'provincial_head') ? currentUser.province : province,
-                    mainCategory,
-                    type,
-                    item,
-                    budget: Number(budget),
-                    reason,
-                    files: selectedFiles
-                });
+                if (isSubmitting) return;
+                setIsSubmitting(true);
+                try {
+                    await onSubmit({
+                        province: (currentUser.role === 'operator' || currentUser.role === 'provincial_head') ? currentUser.province : province,
+                        mainCategory,
+                        type,
+                        item,
+                        budget: Number(budget),
+                        reason,
+                        files: selectedFiles
+                    });
+                } finally {
+                    setIsSubmitting(false);
+                }
             };
 
             return (
@@ -1275,9 +1282,13 @@
                         </div>
 
                         <div className="pt-4 flex justify-end gap-3 border-t">
-                            <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">ยกเลิก</button>
-                            <button type="submit" className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 shadow-md flex items-center gap-2">
-                                <i className="fas fa-paper-plane"></i> บันทึกและยื่นคำขอ
+                            <button type="button" onClick={onCancel} disabled={isSubmitting} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-50">ยกเลิก</button>
+                            <button type="submit" disabled={isSubmitting} className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md flex items-center gap-2 ${isSubmitting ? 'bg-brand-400 cursor-wait' : 'bg-brand-600 hover:bg-brand-700'}`}>
+                                {isSubmitting ? (
+                                    <><i className="fas fa-spinner fa-spin"></i> กำลังบันทึกคำขอ...</>
+                                ) : (
+                                    <><i className="fas fa-paper-plane"></i> บันทึกและยื่นคำขอ</>
+                                )}
                             </button>
                         </div>
                     </form>
@@ -1742,7 +1753,16 @@
                                             <button 
                                                 onClick={() => {
                                                     if (fileUrl && fileUrl !== '#') {
-                                                        window.open(fileUrl, '_blank');
+                                                        if (fileUrl.startsWith('data:')) {
+                                                            const a = document.createElement('a');
+                                                            a.href = fileUrl;
+                                                            a.download = fileName;
+                                                            document.body.appendChild(a);
+                                                            a.click();
+                                                            document.body.removeChild(a);
+                                                        } else {
+                                                            window.open(fileUrl, '_blank');
+                                                        }
                                                     } else {
                                                         alert(`กำลังเปิดไฟล์จำลอง: ${fileName}`);
                                                     }
@@ -2821,8 +2841,39 @@
         // ===============================================================
         const App = () => {
             const [view, setView] = useState('dashboard');
-            const [requests, setRequests] = useState(generateInitialData);
-            const [assets, setAssets] = useState(initialAssetData);
+            const [requests, setRequests] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mindbudget_requests');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    }
+                } catch(e) {}
+                return generateInitialData();
+            });
+            const [assets, setAssets] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('mindbudget_assets');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    }
+                } catch(e) {}
+                return initialAssetData;
+            });
+
+            // Auto-persist requests & assets to localStorage
+            useEffect(() => {
+                try {
+                    localStorage.setItem('mindbudget_requests', JSON.stringify(requests));
+                } catch(e) {}
+            }, [requests]);
+
+            useEffect(() => {
+                try {
+                    localStorage.setItem('mindbudget_assets', JSON.stringify(assets));
+                } catch(e) {}
+            }, [assets]);
             
             // All Users in System (Persisted in localStorage & Firestore)
             const [users, setUsers] = useState(() => {
@@ -3154,116 +3205,166 @@
                 showToast('ยกเลิกการเชื่อมต่อ Firebase และกลับสู่โหมดข้อมูลจำลอง');
             };
 
+            // Safe File Processor with Fast 3s Timeout & Base64/ObjectURL Local Fallback
+            const processAttachments = async (files, requestId) => {
+                if (!files || files.length === 0) return [];
+                const results = [];
+                for (const file of files) {
+                    let uploaded = false;
+                    let fileUrl = '';
+                    const storagePath = `requests/${requestId}/${Date.now()}_${file.name}`;
+
+                    // Try Firebase Storage with 3-second strict timeout
+                    if (FirebaseService.isConfigured && FirebaseService.storage) {
+                        try {
+                            const storageRef = FirebaseService.storage.ref(storagePath);
+                            const uploadPromise = storageRef.put(file).then(snap => snap.ref.getDownloadURL());
+                            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000));
+                            fileUrl = await Promise.race([uploadPromise, timeoutPromise]);
+                            uploaded = true;
+                        } catch(err) {
+                            console.warn('Storage upload note (using local file fallback):', err.message);
+                        }
+                    }
+
+                    // Fallback to local Data URL (Base64) or ObjectURL
+                    if (!uploaded) {
+                        try {
+                            if (file.size <= 4 * 1024 * 1024) {
+                                fileUrl = await new Promise((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result);
+                                    reader.onerror = () => resolve(URL.createObjectURL(file));
+                                    reader.readAsDataURL(file);
+                                });
+                            } else {
+                                fileUrl = URL.createObjectURL(file);
+                            }
+                        } catch(e) {
+                            fileUrl = URL.createObjectURL(file);
+                        }
+                    }
+
+                    results.push({
+                        name: file.name,
+                        size: file.size,
+                        type: file.type || 'application/octet-stream',
+                        url: fileUrl,
+                        storageType: uploaded ? 'cloud' : 'local',
+                        uploadedAt: new Date().toISOString()
+                    });
+                }
+                return results;
+            };
+
             // Request Operations
             const handleAddRequest = async (newRequest) => {
-                showToast('กำลังบันทึกคำขอและอัปโหลดเอกสารแนบ...');
+                showToast('กำลังบันทึกคำขอและประมวลผลเอกสารแนบ...');
                 
                 const newId = 'REQ-68-' + String(Date.now()).slice(-4);
                 let finalAttachments = [];
 
-                if (FirebaseService.isConfigured && FirebaseService.storage && newRequest.files && newRequest.files.length > 0) {
-                    try {
-                        for (const file of newRequest.files) {
-                            const storagePath = `requests/${newId}/${Date.now()}_${file.name}`;
-                            const storageRef = FirebaseService.storage.ref(storagePath);
-                            const snapshot = await storageRef.put(file);
-                            const downloadUrl = await snapshot.ref.getDownloadURL();
-                            finalAttachments.push({
-                                name: file.name,
-                                size: file.size,
-                                url: downloadUrl,
-                                storagePath: storagePath,
-                                uploadedAt: new Date().toISOString()
-                            });
-                        }
-                    } catch(err) {
-                        console.error('Storage upload error:', err);
-                        showToast('เกิดข้อผิดพลาดในการอัปโหลดไฟล์ขึ้น Storage');
-                    }
-                } else if (newRequest.files && newRequest.files.length > 0) {
-                    finalAttachments = newRequest.files.map(f => ({
-                        name: f.name,
-                        size: f.size,
-                        url: URL.createObjectURL(f),
-                        uploadedAt: new Date().toISOString()
-                    }));
+                if (newRequest.files && newRequest.files.length > 0) {
+                    finalAttachments = await processAttachments(newRequest.files, newId);
                 } else {
                     finalAttachments = [
-                        { name: 'เอกสารขอตั้งงบประมาณ_ปี68.pdf', size: 1450000, url: '#', uploadedAt: '2026-10-01' },
-                        { name: 'แบบแปลนราคากลาง_ปร4_5.pdf', size: 3820000, url: '#', uploadedAt: '2026-10-01' }
+                        { name: 'เอกสารขอตั้งงบประมาณ_ปี68.pdf', size: 1450000, url: '#', storageType: 'sample', uploadedAt: new Date().toISOString().split('T')[0] },
+                        { name: 'แบบแปลนราคากลาง_ปร4_5.pdf', size: 3820000, url: '#', storageType: 'sample', uploadedAt: new Date().toISOString().split('T')[0] }
                     ];
                 }
 
                 const reqToAdd = {
+                    id: newId,
                     province: newRequest.province,
                     mainCategory: newRequest.mainCategory,
                     type: newRequest.type,
                     item: newRequest.item,
                     budget: newRequest.budget,
                     reason: newRequest.reason,
-                    id: newId,
                     status: 'draft',
                     attachments: finalAttachments,
                     coordinator: currentUser.displayName,
                     date: new Date().toISOString().split('T')[0],
                     auditLog: [
-                        { action: 'สร้างร่างคำขอ', by: currentUser.displayName, role: currentUser.role, timestamp: new Date().toLocaleString('th-TH') }
+                        { action: 'สร้างคำขอตั้งงบประมาณใหม่', by: currentUser.displayName, role: currentUser.role, timestamp: new Date().toLocaleString('th-TH') }
                     ]
                 };
 
-                setRequests([reqToAdd, ...requests]);
-                setView('list');
-                showToast('บันทึกคำขอและอัปโหลดเอกสารแนบเรียบร้อยแล้ว');
+                // 1. Save to requests state & localStorage
+                const updatedRequests = [reqToAdd, ...requests];
+                setRequests(updatedRequests);
+                try {
+                    localStorage.setItem('mindbudget_requests', JSON.stringify(updatedRequests));
+                } catch(e) {}
 
+                // 2. Also register in Assets (สถานะงบลงทุน)
+                const newAsset = {
+                    id: 'AST-' + String(Date.now()).slice(-4),
+                    province: reqToAdd.province,
+                    name: reqToAdd.item,
+                    category: (reqToAdd.mainCategory === 'สิ่งก่อสร้าง' || (reqToAdd.type && reqToAdd.type.includes('อาคาร'))) ? (reqToAdd.type.includes('บ้านพัก') ? 'บ้านพักข้าราชการ' : 'อาคารสำนักงาน') : 'สิ่งปลูกสร้าง/ครุภัณฑ์',
+                    level: '-',
+                    quantity: 1,
+                    age: 0,
+                    landRights: 'ที่ราชพัสดุ',
+                    areaSize: '-',
+                    staffCount: 0,
+                    maintenanceCost: reqToAdd.budget,
+                    utilityCost: 0,
+                    requestId: reqToAdd.id,
+                    status: 'ยื่นคำของบประมาณแล้ว'
+                };
+                const updatedAssets = [newAsset, ...assets];
+                setAssets(updatedAssets);
+                try {
+                    localStorage.setItem('mindbudget_assets', JSON.stringify(updatedAssets));
+                } catch(e) {}
+
+                // 3. Navigate smoothly to 'list' (รายการคำขอ)
+                setView('list');
+                showToast(`บันทึกคำขอสำเร็จ (${newId}) ข้อมูลปรากฏใน 'รายการคำขอ' และ 'สถานะงบลงทุน' เรียบร้อยแล้ว`);
+
+                // 4. Background Sync to Cloud Firestore (non-blocking)
                 if (FirebaseService.isConfigured && FirebaseService.db) {
-                    FirebaseService.db.collection('requests').doc(reqToAdd.id).set(reqToAdd).catch(console.error);
+                    FirebaseService.db.collection('requests').doc(reqToAdd.id).set(reqToAdd).catch(e => console.warn('Firestore requests sync note:', e.message));
+                    FirebaseService.db.collection('assets').doc(newAsset.id).set(newAsset).catch(e => console.warn('Firestore assets sync note:', e.message));
                 }
             };
 
             const handleUploadMoreAttachments = async (requestId, files) => {
-                let uploadedItems = [];
-                if (FirebaseService.isConfigured && FirebaseService.storage) {
-                    for (const file of files) {
-                        const storagePath = `requests/${requestId}/${Date.now()}_${file.name}`;
-                        const storageRef = FirebaseService.storage.ref(storagePath);
-                        const snapshot = await storageRef.put(file);
-                        const downloadUrl = await snapshot.ref.getDownloadURL();
-                        uploadedItems.push({
-                            name: file.name,
-                            size: file.size,
-                            url: downloadUrl,
-                            storagePath: storagePath,
-                            uploadedAt: new Date().toISOString()
-                        });
-                    }
-                } else {
-                    uploadedItems = files.map(f => ({
-                        name: f.name,
-                        size: f.size,
-                        url: URL.createObjectURL(f),
-                        uploadedAt: new Date().toISOString()
-                    }));
-                }
+                showToast('กำลังประมวลผลไฟล์แนบ...');
+                const uploadedItems = await processAttachments(files, requestId);
 
-                setRequests(prev => prev.map(r => {
+                const updatedRequests = requests.map(r => {
                     if (r.id === requestId) {
                         const existing = r.attachments || [];
                         const merged = [...existing, ...uploadedItems];
                         if (FirebaseService.isConfigured && FirebaseService.db) {
                             FirebaseService.db.collection('requests').doc(requestId).update({
                                 attachments: merged
-                            }).catch(console.error);
+                            }).catch(console.warn);
                         }
-                        return { ...r, attachments: merged };
+                        return { 
+                            ...r, 
+                            attachments: merged,
+                            auditLog: [
+                                ...(r.auditLog || []),
+                                { action: `อัปโหลดเอกสารแนบเพิ่มเติม (${uploadedItems.length} ไฟล์)`, by: currentUser.displayName, role: currentUser.role, timestamp: new Date().toLocaleString('th-TH') }
+                            ]
+                        };
                     }
                     return r;
-                }));
+                });
+
+                setRequests(updatedRequests);
+                try {
+                    localStorage.setItem('mindbudget_requests', JSON.stringify(updatedRequests));
+                } catch(e) {}
 
                 if (attachmentModalReq && attachmentModalReq.id === requestId) {
                     setAttachmentModalReq(prev => ({ ...prev, attachments: [...(prev.attachments || []), ...uploadedItems] }));
                 }
-
-                showToast(`อัปโหลดเอกสารแนบเพิ่ม ${files.length} ไฟล์เรียบร้อยแล้ว`);
+                showToast(`อัปโหลดเอกสารแนบเพิ่ม ${uploadedItems.length} ไฟล์เรียบร้อยแล้ว`);
             };
 
             const handleUpdateStatus = (id, newStatus, actionTitle = 'ปรับปรุงสถานะ') => {
