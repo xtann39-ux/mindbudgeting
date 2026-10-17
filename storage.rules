@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// ===============================================================
+// Cloud Storage Security Rules - Thai Ministry of Industry
+// ระบบจัดทำคำของบประมาณงบลงทุน - สำนักงานปลัดกระทรวงอุตสาหกรรม (สป.อก.)
+// ===============================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isValidFileSize() {
+      // จำกัดขนาดไฟล์ไม่เกิน 25 MB ต่อไฟล์
+      return request.resource.size <= 25 * 1024 * 1024;
+    }
+    
+    function isValidDocumentType() {
+      // อนุญาตเฉพาะไฟล์เอกสารราชการ: PDF, รูปภาพ, Excel (ปร.4/5), Word
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
+             request.resource.contentType.matches('application/vnd.ms-excel') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/octet-stream');
+    }
+
+    // เอกสารแนบคำของบประมาณ (แบบแปลน, ปร.4/5/6, ใบเสนอราคา, ภาพถ่าย)
+    match /requests/{requestId}/{fileName} {
+      // เจ้าหน้าที่ที่เข้าสู่ระบบสามารถอ่าน/ดาวน์โหลดเอกสารตรวจสอบได้
+      allow read: if isAuthenticated();
+      
+      // การอัปโหลดไฟล์ ต้องล็อกอิน ขนาดไม่เกิน 25MB และเป็นนามสกุลไฟล์ที่อนุญาต
+      allow create, update: if isAuthenticated() && isValidFileSize() && isValidDocumentType();
+      
+      // อนุญาตให้ลบไฟล์ได้
+      allow delete: if isAuthenticated();
+    }
+    
+    // กฎปฏิเสธโฟลเดอร์อื่นโดยเริ่มต้น (Default Deny)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

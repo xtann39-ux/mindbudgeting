@@ -1,0 +1,424 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model & Architectural Overview
+// ===============================================================
+//
+// System: Thai Ministry of Industry Capital Budgeting System
+//         (ระบบจัดทำคำของบประมาณงบลงทุน สป.อก. - สำนักงานปลัดกระทรวงอุตสาหกรรม)
+//
+// Document Structure Assumptions & Field Schemas:
+//
+// 1. Collection: `users/{userId}`
+//    Document ID: Firebase Auth UID (`request.auth.uid`)
+//    Fields:
+//      - uid: string (required, 1-128 chars, immutable, matches document ID)
+//      - email: string (required, valid email pattern, max 100 chars, immutable by non-admin)
+//      - displayName: string (required, 1-150 chars)
+//      - role: string (required, enum: 'operator' | 'provincial_head' | 'central' | 'executive', immutable by non-admin)
+//      - province: string (required, e.g. 'เชียงใหม่', 'ขอนแก่น', 'ส่วนกลาง', 2-100 chars, immutable by non-admin)
+//      - isActive: bool (required, account status, immutable by non-admin)
+//      - createdAt: timestamp (optional, immutable)
+//      - updatedAt: timestamp (optional)
+//
+// 2. Collection: `requests/{requestId}`
+//    Document ID: Auto-generated or unique request ID
+//    Fields:
+//      - province: string (required, province name, 2-100 chars, immutable on update)
+//      - fiscalYear: int or string (required, Thai fiscal year e.g. 2568, 2569)
+//      - mainCategory: string (required, e.g. 'การสร้างใหม่', 'การปรับปรุงซ่อมแซม', 'ครุภัณฑ์', 'รถยนต์', 2-100 chars)
+//      - type: string (required, budget subcategory, 2-150 chars)
+//      - item: string (required, item / project title, 2-300 chars, locked once approved)
+//      - budget: number (required, amount in THB, > 0 and <= 10,000,000,000, locked once approved)
+//      - reason: string (optional, rationale and justification, max 2000 chars)
+//      - status: string (required, workflow status enum:
+//                'draft' | 'submitted_province' | 'submitted_central' |
+//                'returned_operator' | 'returned_province' | 'reviewed' | 'approved')
+//      - createdBy: string (required, author UID, 1-128 chars, immutable on update)
+//      - attachments: list of strings (optional, filenames / URLs, max 20 items)
+//      - revisionNotes: string (optional, return / review comments, max 2000 chars)
+//      - createdAt: timestamp (required, immutable on update)
+//      - updatedAt: timestamp (required)
+//
+// 3. Collection: `assets/{assetId}`
+//    Document ID: Unique asset identifier
+//    Fields:
+//      - province: string (required, province name, 2-100 chars)
+//      - name: string (required, building or asset title, 2-200 chars)
+//      - category: string (required, e.g. 'อาคารสำนักงาน', 'บ้านพักข้าราชการ', 'สิ่งปลูกสร้างอื่น', 2-100 chars)
+//      - level: string (optional, rank/tier for housing, e.g. 'ระดับ 7-8', max 50 chars)
+//      - quantity: number (required, item count, >= 0 and <= 10000)
+//      - age: number (required, building age in years, >= 0 and <= 200)
+//      - landRights: string (required, land tenure e.g. 'ที่ราชพัสดุ', 'ป่าสงวนแห่งชาติ', 1-200 chars)
+//      - areaSize: string (required, land size e.g. '2-1-0 ไร่', '640 ตร.ม.', 1-100 chars)
+//      - staffCount: number (optional, headcount, >= 0 and <= 100000)
+//      - maintenanceCost: number (optional, annual maintenance THB, >= 0 and <= 1000000000)
+//      - utilityCost: number (optional, annual utility expenses THB, >= 0 and <= 1000000000)
+//      - createdBy: string (optional, author UID, max 128 chars, immutable)
+//      - createdAt: timestamp (optional, immutable)
+//      - updatedAt: timestamp (optional)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Core Helper Functions Library
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isPositive(field) {
+      return request.resource.data[field] is number && request.resource.data[field] > 0;
+    }
+
+    function isRecent(time) {
+      return time is timestamp &&
+             time > request.time - duration.value(5, 'm') &&
+             time <= request.time + duration.value(1, 'm');
+    }
+
+    // ===============================================================
+    // RBAC & Authority Resolution Helpers
+    // ===============================================================
+
+    function userDocExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isUserDocActive() {
+      return userDocExists() &&
+             ('isActive' in getUserDoc()) &&
+             getUserDoc().isActive == true;
+    }
+
+    function hasCustomClaim(claim) {
+      return isAuthenticated() && (claim in request.auth.token);
+    }
+
+    // Resolves role either from secure Auth Custom Claims (first priority)
+    // or from the verified active user profile in Firestore
+    function getUserRole() {
+      return hasCustomClaim('role')
+        ? request.auth.token.role
+        : (isUserDocActive() && ('role' in getUserDoc()) ? getUserDoc().role : '');
+    }
+
+    // Resolves assigned province either from secure Auth Custom Claims
+    // or from the verified active user profile in Firestore
+    function getUserProvince() {
+      return hasCustomClaim('province')
+        ? request.auth.token.province
+        : (isUserDocActive() && ('province' in getUserDoc()) ? getUserDoc().province : '');
+    }
+
+    // Central role predicate (includes bootstrap administrative accounts)
+    function isCentral() {
+      return isAuthenticated() && (
+        getUserRole() == 'central' ||
+        (hasCustomClaim('email_verified') && request.auth.token.email_verified == true &&
+         request.auth.token.email in ['admin@industry.go.th', 'central@industry.go.th'])
+      );
+    }
+
+    // Executive role predicate (Ministry leadership)
+    function isExecutive() {
+      return isAuthenticated() && getUserRole() == 'executive';
+    }
+
+    // Provincial Head role predicate (หัวหน้า สอจ.)
+    function isProvincialHead() {
+      return isAuthenticated() && getUserRole() == 'provincial_head';
+    }
+
+    // Operator role predicate (เจ้าหน้าที่ผู้จัดทำคำขอ สอจ.)
+    function isOperator() {
+      return isAuthenticated() && getUserRole() == 'operator';
+    }
+
+    // ===============================================================
+    // Domain Validators (Validator Function Pattern)
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields([
+               'uid', 'email', 'displayName', 'role', 'province',
+               'isActive', 'createdAt', 'updatedAt'
+             ]) &&
+             hasRequiredFields([
+               'uid', 'email', 'displayName', 'role', 'province', 'isActive'
+             ]) &&
+             data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() <= 100 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 150 &&
+             data.role in ['operator', 'provincial_head', 'central', 'executive'] &&
+             data.province is string && data.province.size() >= 2 && data.province.size() <= 100 &&
+             data.isActive is bool &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidRequest(data) {
+      return hasOnlyAllowedFields([
+               'province', 'fiscalYear', 'mainCategory', 'type', 'item',
+               'budget', 'reason', 'status', 'createdBy', 'attachments',
+               'revisionNotes', 'createdAt', 'updatedAt'
+             ]) &&
+             hasRequiredFields([
+               'province', 'fiscalYear', 'mainCategory', 'type', 'item',
+               'budget', 'status', 'createdBy', 'createdAt', 'updatedAt'
+             ]) &&
+             data.province is string && data.province.size() >= 2 && data.province.size() <= 100 &&
+             ((data.fiscalYear is int && data.fiscalYear >= 2500 && data.fiscalYear <= 2700) ||
+              (data.fiscalYear is string && data.fiscalYear.size() >= 4 && data.fiscalYear.size() <= 10)) &&
+             data.mainCategory is string && data.mainCategory.size() >= 2 && data.mainCategory.size() <= 100 &&
+             data.type is string && data.type.size() >= 2 && data.type.size() <= 150 &&
+             data.item is string && data.item.size() >= 2 && data.item.size() <= 300 &&
+             data.budget is number && data.budget > 0 && data.budget <= 10000000000 &&
+             data.status in [
+               'draft',
+               'submitted_province',
+               'submitted_central',
+               'returned_operator',
+               'returned_province',
+               'reviewed',
+               'approved'
+             ] &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('reason' in data) || (data.reason is string && data.reason.size() <= 2000)) &&
+             (!('revisionNotes' in data) || (data.revisionNotes is string && data.revisionNotes.size() <= 2000)) &&
+             (!('attachments' in data) || (data.attachments is list && data.attachments.size() <= 20));
+    }
+
+    function isValidAsset(data) {
+      return hasOnlyAllowedFields([
+               'province', 'name', 'category', 'level', 'quantity',
+               'age', 'landRights', 'areaSize', 'staffCount',
+               'maintenanceCost', 'utilityCost', 'createdBy', 'createdAt', 'updatedAt'
+             ]) &&
+             hasRequiredFields([
+               'province', 'name', 'category', 'quantity', 'age', 'landRights', 'areaSize'
+             ]) &&
+             data.province is string && data.province.size() >= 2 && data.province.size() <= 100 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 200 &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 100 &&
+             (!('level' in data) || (data.level is string && data.level.size() <= 50)) &&
+             data.quantity is number && data.quantity >= 0 && data.quantity <= 10000 &&
+             data.age is number && data.age >= 0 && data.age <= 200 &&
+             data.landRights is string && data.landRights.size() >= 1 && data.landRights.size() <= 200 &&
+             data.areaSize is string && data.areaSize.size() >= 1 && data.areaSize.size() <= 100 &&
+             (!('staffCount' in data) || (data.staffCount is number && data.staffCount >= 0 && data.staffCount <= 100000)) &&
+             (!('maintenanceCost' in data) || (data.maintenanceCost is number && data.maintenanceCost >= 0 && data.maintenanceCost <= 1000000000)) &&
+             (!('utilityCost' in data) || (data.utilityCost is number && data.utilityCost >= 0 && data.utilityCost <= 1000000000)) &&
+             (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 128)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // ===============================================================
+    // Collection 1: Users (`users/{userId}`)
+    // ===============================================================
+    match /users/{userId} {
+      // PII Protection: Users can read only their own profile. Central and Executive can view profiles for administrative audit.
+      allow read: if isAuthenticated() && (
+        isOwner(userId) ||
+        isCentral() ||
+        isExecutive()
+      );
+
+      // Create: Central administrators can provision users with any valid role.
+      // Self-registration is strictly restricted: user cannot escalate their role or self-activate.
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isCentral() ||
+        (isOwner(userId) &&
+         request.resource.data.uid == request.auth.uid &&
+         request.resource.data.role == 'operator' &&
+         request.resource.data.isActive == false)
+      );
+
+      // Update: Central can manage any user profile.
+      // Individual users can update their own basic profile (e.g. displayName, updatedAt),
+      // but are strictly barred from modifying role, province, uid, email, or isActive.
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isCentral() ||
+        (isOwner(userId) && areImmutableFieldsUnchanged(['uid', 'email', 'role', 'province', 'isActive', 'createdAt']))
+      );
+
+      // Delete: Only central administrators can delete user records.
+      allow delete: if isCentral();
+    }
+
+    // ===============================================================
+    // Collection 2: Budget Requests (`requests/{requestId}`)
+    // ===============================================================
+    match /requests/{requestId} {
+      // Read: Operators & Provincial Heads can only read requests from their assigned province.
+      // Central & Executive can read all requests nationwide (supports nationwide queries and filtering).
+      allow read: if isAuthenticated() && (
+        isCentral() ||
+        isExecutive() ||
+        ((isOperator() || isProvincialHead()) && resource.data.province == getUserProvince())
+      );
+
+      // Create: Operators can create requests for their assigned province in 'draft' or 'submitted_province' status.
+      // Central can also create requests for central investment projects.
+      allow create: if isAuthenticated() && isValidRequest(request.resource.data) && (
+        (isOperator() &&
+         request.resource.data.province == getUserProvince() &&
+         request.resource.data.createdBy == request.auth.uid &&
+         request.resource.data.status in ['draft', 'submitted_province']) ||
+        (isCentral() && request.resource.data.createdBy == request.auth.uid)
+      );
+
+      // Update: Governed by strict workflow state machine and role boundaries.
+      allow update: if isAuthenticated() &&
+        isValidRequest(request.resource.data) &&
+        // Invariant: Once approved, budget and item can NEVER be mutated
+        (resource.data.status != 'approved' ||
+         (request.resource.data.budget == resource.data.budget &&
+          request.resource.data.item == resource.data.item)) &&
+        (
+          // 1. Operator: update draft or returned request within own province; can transition to submitted_province
+          (isOperator() &&
+           resource.data.province == getUserProvince() &&
+           request.resource.data.province == getUserProvince() &&
+           resource.data.status in ['draft', 'returned_operator'] &&
+           request.resource.data.status in ['draft', 'returned_operator', 'submitted_province'] &&
+           areImmutableFieldsUnchanged(['createdBy', 'createdAt', 'province'])) ||
+
+          // 2. Provincial Head: endorse to submitted_central or return to returned_operator (cannot mutate budget/item)
+          (isProvincialHead() &&
+           resource.data.province == getUserProvince() &&
+           request.resource.data.province == getUserProvince() &&
+           resource.data.status in ['submitted_province', 'returned_province'] &&
+           request.resource.data.status in ['submitted_central', 'returned_operator'] &&
+           areImmutableFieldsUnchanged(['createdBy', 'createdAt', 'province', 'budget', 'item', 'fiscalYear', 'mainCategory', 'type'])) ||
+
+          // 3. Central: review submitted requests to reviewed or returned_province
+          (isCentral() &&
+           areImmutableFieldsUnchanged(['createdBy', 'createdAt', 'province']) &&
+           ((resource.data.status == 'submitted_central' &&
+             request.resource.data.status in ['reviewed', 'returned_province']) ||
+            (resource.data.status != 'approved' &&
+             request.resource.data.status == resource.data.status))) ||
+
+          // 4. Executive: approve reviewed requests
+          (isExecutive() &&
+           resource.data.status == 'reviewed' &&
+           request.resource.data.status == 'approved' &&
+           areImmutableFieldsUnchanged(['createdBy', 'createdAt', 'province', 'budget', 'item']))
+        );
+
+      // Delete: Operators can only delete their own draft requests. Central can delete non-approved requests.
+      allow delete: if isAuthenticated() && (
+        (isOperator() &&
+         resource.data.province == getUserProvince() &&
+         resource.data.createdBy == request.auth.uid &&
+         resource.data.status == 'draft') ||
+        (isCentral() && resource.data.status != 'approved')
+      );
+    }
+
+    // ===============================================================
+    // Collection 3: Capital Assets (`assets/{assetId}`)
+    // ===============================================================
+    match /assets/{assetId} {
+      // Read: Provincial staff can read assets in their province. Central & Executive can read nationwide.
+      allow read: if isAuthenticated() && (
+        isCentral() ||
+        isExecutive() ||
+        ((isOperator() || isProvincialHead()) && resource.data.province == getUserProvince())
+      );
+
+      // Create: Provincial staff can add assets for their province. Central & Executive can add anywhere.
+      allow create: if isAuthenticated() && isValidAsset(request.resource.data) && (
+        ((isOperator() || isProvincialHead()) &&
+         request.resource.data.province == getUserProvince()) ||
+        isCentral() ||
+        isExecutive()
+      );
+
+      // Update: Provincial staff can update assets in their province. Central & Executive can update nationwide.
+      allow update: if isAuthenticated() && isValidAsset(request.resource.data) &&
+        areImmutableFieldsUnchanged(['createdAt', 'createdBy']) &&
+        (
+          ((isOperator() || isProvincialHead()) &&
+           resource.data.province == getUserProvince() &&
+           request.resource.data.province == getUserProvince()) ||
+          isCentral() ||
+          isExecutive()
+        );
+
+      // Delete: Provincial staff can delete assets in their province. Central & Executive can delete nationwide.
+      allow delete: if isAuthenticated() && (
+        ((isOperator() || isProvincialHead()) && resource.data.province == getUserProvince()) ||
+        isCentral() ||
+        isExecutive()
+      );
+    }
+
+    // ===============================================================
+    // Default Deny Rule for Unmatched Paths
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
