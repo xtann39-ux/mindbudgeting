@@ -1662,7 +1662,7 @@
         };
 
         // Firebase Configuration Modal
-        const FirebaseConfigModal = ({ isOpen, onClose, onSave, onDisconnect }) => {
+        const FirebaseConfigModal = ({ isOpen, onClose, onSave, onDisconnect, onSyncAllToFirebase }) => {
             const [jsonInput, setJsonInput] = useState('');
             const [error, setError] = useState(null);
 
@@ -1743,6 +1743,25 @@
 }'
                             className="w-full input-field font-mono text-[11px] p-3 rounded-xl mb-4"
                         ></textarea>
+
+                        {FirebaseService.isConfigured && onSyncAllToFirebase && (
+                            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                                <div className="text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
+                                    <i className="fas fa-cloud-arrow-up text-purple-600"></i>
+                                    ซิงค์ข้อมูลทั้งหมดขึ้น Cloud Firestore
+                                </div>
+                                <p className="text-[11px] text-purple-700 mb-2 leading-relaxed">
+                                    อัปโหลดคำขอตั้งงบประมาณ 76 จังหวัด ข้อมูลสินทรัพย์ และรายชื่อผู้ใช้งาน ขึ้นสู่ฐานข้อมูล Cloud Firestore
+                                </p>
+                                <button 
+                                    type="button" 
+                                    onClick={onSyncAllToFirebase}
+                                    className="w-full py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition flex items-center justify-center gap-1.5 active:scale-95"
+                                >
+                                    <i className="fas fa-database"></i> อัปโหลดและซิงค์ข้อมูลขึ้น Cloud Firestore
+                                </button>
+                            </div>
+                        )}
 
                         <div className="flex justify-between items-center pt-3 border-t">
                             {FirebaseService.isConfigured ? (
@@ -2704,9 +2723,10 @@
                         }
                     });
 
-                    // Sync Requests
+                    // 1. Sync Requests from Cloud Firestore
+                    let unsubReq = () => {};
                     try {
-                        const unsub = FirebaseService.db.collection('requests').onSnapshot(snapshot => {
+                        unsubReq = FirebaseService.db.collection('requests').onSnapshot(snapshot => {
                             if (!snapshot.empty) {
                                 const items = [];
                                 snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
@@ -2715,10 +2735,47 @@
                         }, error => {
                             console.warn('Realtime requests sync notice:', error.message);
                         });
-                        return () => unsub();
                     } catch(e) {
                         console.log('Realtime requests sync error:', e);
                     }
+
+                    // 2. Sync Assets from Cloud Firestore
+                    let unsubAssets = () => {};
+                    try {
+                        unsubAssets = FirebaseService.db.collection('assets').onSnapshot(snapshot => {
+                            if (!snapshot.empty) {
+                                const items = [];
+                                snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                                setAssets(items);
+                            }
+                        }, error => {
+                            console.warn('Realtime assets sync notice:', error.message);
+                        });
+                    } catch(e) {
+                        console.log('Realtime assets sync error:', e);
+                    }
+
+                    // 3. Sync Users from Cloud Firestore
+                    let unsubUsers = () => {};
+                    try {
+                        unsubUsers = FirebaseService.db.collection('users').onSnapshot(snapshot => {
+                            if (!snapshot.empty) {
+                                const items = [];
+                                snapshot.forEach(doc => items.push({ uid: doc.id, ...doc.data() }));
+                                setUsers(items);
+                            }
+                        }, error => {
+                            console.warn('Realtime users sync notice:', error.message);
+                        });
+                    } catch(e) {
+                        console.log('Realtime users sync error:', e);
+                    }
+
+                    return () => {
+                        unsubReq();
+                        unsubAssets();
+                        unsubUsers();
+                    };
                 }
             }, [isFirebaseConnected]);
 
@@ -3109,15 +3166,19 @@
                 }
             };
 
-            // Asset Handlers
+            // Asset Handlers (Realtime Firestore Synced)
             const handleSaveAsset = (assetData) => {
+                const assetId = assetData.id ? String(assetData.id) : ('AST-' + Date.now());
+                const toSave = { ...assetData, id: assetId };
                 if (assetData.id) {
-                    setAssets(assets.map(a => a.id === assetData.id ? assetData : a));
+                    setAssets(assets.map(a => String(a.id) === String(assetData.id) ? toSave : a));
                     showToast('ปรับปรุงข้อมูลอาคาร/สิ่งปลูกสร้างเรียบร้อยแล้ว');
                 } else {
-                    const newEntry = { ...assetData, id: Date.now() };
-                    setAssets([newEntry, ...assets]);
+                    setAssets([toSave, ...assets]);
                     showToast('เพิ่มรายการอาคาร/สิ่งปลูกสร้างเรียบร้อยแล้ว');
+                }
+                if (FirebaseService.isConfigured && FirebaseService.db) {
+                    FirebaseService.db.collection('assets').doc(assetId).set(toSave, { merge: true }).catch(console.error);
                 }
                 setIsAssetModalOpen(false);
                 setEditingAsset(null);
@@ -3125,8 +3186,41 @@
 
             const handleDeleteAsset = (id) => {
                 if (window.confirm('คุณต้องการลบรายการอาคาร/สิ่งปลูกสร้างนี้ใช่หรือไม่?')) {
-                    setAssets(assets.filter(a => a.id !== id));
+                    const strId = String(id);
+                    setAssets(assets.filter(a => String(a.id) !== strId));
+                    if (FirebaseService.isConfigured && FirebaseService.db) {
+                        FirebaseService.db.collection('assets').doc(strId).delete().catch(console.error);
+                    }
                     showToast('ลบรายการเรียบร้อยแล้ว');
+                }
+            };
+
+            // One-click Batch Database Sync to Cloud Firestore
+            const handleSyncAllToFirebase = async () => {
+                if (!FirebaseService.isConfigured || !FirebaseService.db) {
+                    showToast('ยังไม่ได้เชื่อมต่อ Firebase หรือกำลังเชื่อมต่อ...');
+                    return;
+                }
+                showToast('กำลังนำส่งข้อมูลขึ้น Cloud Firestore...');
+                try {
+                    const batch = FirebaseService.db.batch();
+                    requests.slice(0, 30).forEach(r => {
+                        const ref = FirebaseService.db.collection('requests').doc(String(r.id));
+                        batch.set(ref, r, { merge: true });
+                    });
+                    assets.slice(0, 20).forEach(a => {
+                        const ref = FirebaseService.db.collection('assets').doc(String(a.id));
+                        batch.set(ref, a, { merge: true });
+                    });
+                    users.forEach(u => {
+                        const ref = FirebaseService.db.collection('users').doc(u.uid);
+                        batch.set(ref, u, { merge: true });
+                    });
+                    await batch.commit();
+                    showToast('ซิงค์ข้อมูลคำของบประมาณ สินทรัพย์ และผู้ใช้ ขึ้น Cloud Firestore สำเร็จแล้ว!');
+                } catch(err) {
+                    console.error('Sync all error:', err);
+                    showToast('เกิดข้อผิดพลาดในการซิงค์ข้อมูล: ' + err.message);
                 }
             };
 
@@ -3440,6 +3534,7 @@
                         onClose={() => setIsFirebaseModalOpen(false)}
                         onSave={handleSaveFirebaseConfig}
                         onDisconnect={handleDisconnectFirebase}
+                        onSyncAllToFirebase={handleSyncAllToFirebase}
                     />
                 </div>
             );
