@@ -765,6 +765,8 @@
         const AssetStatusView = ({ assets, currentUser, onAddNew, onEdit, onDelete }) => {
             const [filterProvince, setFilterProvince] = useState('');
             const [filterCategory, setFilterCategory] = useState('');
+            const [sortField, setSortField] = useState('province');
+            const [sortDirection, setSortDirection] = useState('asc');
 
             const filteredAssets = assets.filter(a => {
                 const matchProv = filterProvince ? a.province === filterProvince : (currentUser.role === 'operator' || currentUser.role === 'provincial_head' ? a.province === currentUser.province : true);
@@ -772,11 +774,71 @@
                 return matchProv && matchCat;
             });
 
-            const totalAssets = filteredAssets.length;
-            const totalOffice = filteredAssets.filter(a => a.category === 'อาคารสำนักงาน').length;
-            const totalHousing = filteredAssets.filter(a => a.category === 'บ้านพักข้าราชการ').length;
-            const totalMaintenance = filteredAssets.reduce((acc, c) => acc + (c.maintenanceCost || 0), 0);
-            const totalUtility = filteredAssets.reduce((acc, c) => acc + (c.utilityCost || 0), 0);
+            const handleSort = (field) => {
+                if (sortField === field) {
+                    setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortField(field);
+                    const defaultDesc = ['maintenanceCost', 'utilityCost', 'age', 'quantity', 'areaSize'].includes(field);
+                    setSortDirection(defaultDesc ? 'desc' : 'asc');
+                }
+            };
+
+            const parseArea = (val) => {
+                if (!val) return 0;
+                const m = String(val).match(/(\d+)[-](\d+)[-](\d+)/);
+                if (m) {
+                    return (Number(m[1]) * 400) + (Number(m[2]) * 100) + Number(m[3]);
+                }
+                const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+                return isNaN(num) ? 0 : num;
+            };
+
+            const sortedAssets = useMemo(() => {
+                return [...filteredAssets].sort((a, b) => {
+                    let cmp = 0;
+                    if (sortField === 'province') {
+                        cmp = (a.province || '').localeCompare(b.province || '', 'th');
+                    } else if (sortField === 'name') {
+                        cmp = (a.name || '').localeCompare(b.name || '', 'th');
+                    } else if (sortField === 'category') {
+                        cmp = (a.category || '').localeCompare(b.category || '', 'th');
+                    } else if (sortField === 'quantity') {
+                        cmp = (Number(a.quantity) || 0) - (Number(b.quantity) || 0);
+                    } else if (sortField === 'age') {
+                        cmp = (Number(a.age) || 0) - (Number(b.age) || 0);
+                    } else if (sortField === 'areaSize') {
+                        cmp = parseArea(a.areaSize) - parseArea(b.areaSize);
+                    } else if (sortField === 'maintenanceCost') {
+                        cmp = (Number(a.maintenanceCost) || 0) - (Number(b.maintenanceCost) || 0);
+                    } else if (sortField === 'utilityCost') {
+                        cmp = (Number(a.utilityCost) || 0) - (Number(b.utilityCost) || 0);
+                    }
+                    return sortDirection === 'asc' ? cmp : -cmp;
+                });
+            }, [filteredAssets, sortField, sortDirection]);
+
+            const totalAssets = sortedAssets.length;
+            const totalOffice = sortedAssets.filter(a => a.category === 'อาคารสำนักงาน').length;
+            const totalHousing = sortedAssets.filter(a => a.category === 'บ้านพักข้าราชการ').length;
+            const totalMaintenance = sortedAssets.reduce((acc, c) => acc + (c.maintenanceCost || 0), 0);
+            const totalUtility = sortedAssets.reduce((acc, c) => acc + (c.utilityCost || 0), 0);
+
+            const renderSortTh = (field, label, align = 'text-left') => {
+                const isActive = sortField === field;
+                return (
+                    <th 
+                        onClick={() => handleSort(field)}
+                        className={`p-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors ${align} ${isActive ? 'text-purple-700 bg-purple-50/70 font-extrabold' : 'text-slate-600 font-bold'}`}
+                        title={`คลิกเพื่อเรียงลำดับตาม ${label}`}
+                    >
+                        <div className={`inline-flex items-center gap-1.5 ${align === 'text-right' ? 'justify-end w-full' : align === 'text-center' ? 'justify-center w-full' : ''}`}>
+                            <span>{label}</span>
+                            <i className={`fas ${!isActive ? 'fa-sort text-slate-300 text-[11px]' : sortDirection === 'asc' ? 'fa-sort-up text-purple-600 text-sm' : 'fa-sort-down text-purple-600 text-sm'}`}></i>
+                        </div>
+                    </th>
+                );
+            };
 
             return (
                 <div className="space-y-6">
@@ -811,6 +873,35 @@
                                 <option value="บ้านพักข้าราชการ">บ้านพักข้าราชการ</option>
                                 <option value="สิ่งปลูกสร้างอื่น">สิ่งปลูกสร้างอื่น</option>
                             </select>
+
+                            <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                                <span className="text-[11px] text-slate-500 font-semibold px-1 whitespace-nowrap">
+                                    <i className="fas fa-arrow-down-short-wide text-purple-600 mr-1"></i>เรียงตาม:
+                                </span>
+                                <select 
+                                    value={sortField} 
+                                    onChange={(e) => handleSort(e.target.value)} 
+                                    className="input-field rounded-lg text-xs px-2.5 py-1.5 font-medium bg-white"
+                                >
+                                    <option value="province">จังหวัด</option>
+                                    <option value="category">ประเภท</option>
+                                    <option value="quantity">จำนวน</option>
+                                    <option value="age">อายุ (ปี)</option>
+                                    <option value="areaSize">ขนาดพื้นที่</option>
+                                    <option value="maintenanceCost">ค่าบำรุงรักษา</option>
+                                    <option value="utilityCost">ค่าสาธารณูปโภค</option>
+                                    <option value="name">ชื่ออาคาร / รายการ</option>
+                                </select>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                                    title="สลับลำดับการเรียง"
+                                >
+                                    <i className={`fas ${sortDirection === 'asc' ? 'fa-arrow-up-wide-short' : 'fa-arrow-down-wide-short'} text-purple-600`}></i>
+                                    <span>{sortDirection === 'asc' ? 'น้อย → มาก' : 'มาก → น้อย'}</span>
+                                </button>
+                            </div>
 
                             <button onClick={onAddNew} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition shadow flex items-center gap-1.5">
                                 <i className="fas fa-plus"></i> บันทึกอาคารใหม่
@@ -848,15 +939,15 @@
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
                                     <tr>
-                                        <th className="p-3.5">จังหวัด</th>
-                                        <th className="p-3.5">ชื่ออาคาร / รายการ</th>
-                                        <th className="p-3.5">ประเภท / ระดับ</th>
-                                        <th className="p-3.5 text-center">จำนวน</th>
-                                        <th className="p-3.5 text-center">อายุ (ปี)</th>
+                                        {renderSortTh('province', 'จังหวัด')}
+                                        {renderSortTh('name', 'ชื่ออาคาร / รายการ')}
+                                        {renderSortTh('category', 'ประเภท / ระดับ')}
+                                        {renderSortTh('quantity', 'จำนวน', 'text-center')}
+                                        {renderSortTh('age', 'อายุ (ปี)', 'text-center')}
                                         <th className="p-3.5">สิทธิที่ดิน</th>
-                                        <th className="p-3.5">ขนาดพื้นที่</th>
-                                        <th className="p-3.5 text-right">ค่าบำรุงรักษา</th>
-                                        <th className="p-3.5 text-right">ค่าสาธารณูปโภค</th>
+                                        {renderSortTh('areaSize', 'ขนาดพื้นที่')}
+                                        {renderSortTh('maintenanceCost', 'ค่าบำรุงรักษา', 'text-right')}
+                                        {renderSortTh('utilityCost', 'ค่าสาธารณูปโภค', 'text-right')}
                                         <th className="p-3.5 text-center">จัดการ</th>
                                     </tr>
                                 </thead>
@@ -866,7 +957,7 @@
                                             <td colSpan="10" className="text-center py-8 text-slate-400">ไม่พบข้อมูลอาคารสิ่งปลูกสร้างตามเงื่อนไข</td>
                                         </tr>
                                     ) : (
-                                        filteredAssets.map(item => (
+                                        sortedAssets.map(item => (
                                             <tr key={item.id} className="hover:bg-slate-50">
                                                 <td className="p-3.5 font-bold text-slate-700">{item.province}</td>
                                                 <td className="p-3.5 font-semibold text-slate-800">{item.name}</td>
@@ -1207,6 +1298,8 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [statusFilter, setStatusFilter] = useState('');
             const [provinceFilter, setProvinceFilter] = useState('');
+            const [sortField, setSortField] = useState('id');
+            const [sortDirection, setSortDirection] = useState('desc');
 
             const filtered = useMemo(() => {
                 return requests.filter(r => {
@@ -1221,6 +1314,55 @@
                     return matchRoleProv && matchSearch && matchStatus;
                 });
             }, [requests, currentUser, searchTerm, statusFilter, provinceFilter]);
+
+            const handleSort = (field) => {
+                if (sortField === field) {
+                    setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortField(field);
+                    const defaultDesc = ['budget', 'id'].includes(field);
+                    setSortDirection(defaultDesc ? 'desc' : 'asc');
+                }
+            };
+
+            const sortedRequests = useMemo(() => {
+                return [...filtered].sort((a, b) => {
+                    let cmp = 0;
+                    if (sortField === 'province') {
+                        cmp = (a.province || '').localeCompare(b.province || '', 'th');
+                    } else if (sortField === 'item') {
+                        cmp = (a.item || '').localeCompare(b.item || '', 'th');
+                    } else if (sortField === 'budget') {
+                        cmp = (Number(a.budget) || 0) - (Number(b.budget) || 0);
+                    } else if (sortField === 'status') {
+                        const statusOrder = ['draft', 'submitted_province', 'submitted_central', 'reviewed', 'approved', 'returned_operator', 'returned_province'];
+                        const idxA = statusOrder.indexOf(a.status);
+                        const idxB = statusOrder.indexOf(b.status);
+                        cmp = (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+                    } else if (sortField === 'category') {
+                        cmp = (a.mainCategory || '').localeCompare(b.mainCategory || '', 'th');
+                    } else if (sortField === 'id') {
+                        cmp = (a.id || '').localeCompare(b.id || '');
+                    }
+                    return sortDirection === 'asc' ? cmp : -cmp;
+                });
+            }, [filtered, sortField, sortDirection]);
+
+            const renderSortTh = (field, label, align = 'text-left') => {
+                const isActive = sortField === field;
+                return (
+                    <th 
+                        onClick={() => handleSort(field)}
+                        className={`p-3.5 cursor-pointer select-none hover:bg-slate-100 transition-colors ${align} ${isActive ? 'text-purple-700 bg-purple-50/70 font-extrabold' : 'text-slate-600 font-bold'}`}
+                        title={`คลิกเพื่อเรียงลำดับตาม ${label}`}
+                    >
+                        <div className={`inline-flex items-center gap-1.5 ${align === 'text-right' ? 'justify-end w-full' : align === 'text-center' ? 'justify-center w-full' : ''}`}>
+                            <span>{label}</span>
+                            <i className={`fas ${!isActive ? 'fa-sort text-slate-300 text-[11px]' : sortDirection === 'asc' ? 'fa-sort-up text-purple-600 text-sm' : 'fa-sort-down text-purple-600 text-sm'}`}></i>
+                        </div>
+                    </th>
+                );
+            };
 
             const getStatusBadge = (status) => {
                 const conf = STATUS_CONFIG[status] || { label: status, badge: 'bg-slate-100 text-slate-800', icon: 'fa-circle' };
@@ -1269,6 +1411,33 @@
                                     <option key={k} value={k}>{STATUS_CONFIG[k].label}</option>
                                 ))}
                             </select>
+
+                            <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                                <span className="text-[11px] text-slate-500 font-semibold px-1 whitespace-nowrap">
+                                    <i className="fas fa-arrow-down-short-wide text-purple-600 mr-1"></i>เรียงตาม:
+                                </span>
+                                <select 
+                                    value={sortField} 
+                                    onChange={(e) => handleSort(e.target.value)} 
+                                    className="input-field rounded-lg text-xs px-2.5 py-1.5 font-medium bg-white"
+                                >
+                                    <option value="id">รหัสคำขอ</option>
+                                    <option value="province">จังหวัด (ก-ฮ)</option>
+                                    <option value="item">ชื่อโครงการ / รายการ</option>
+                                    <option value="budget">วงเงินงบประมาณ</option>
+                                    <option value="status">สถานะขั้นตอน</option>
+                                    <option value="category">หมวดหมู่งบลงทุน</option>
+                                </select>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                                    title="สลับลำดับการเรียง"
+                                >
+                                    <i className={`fas ${sortDirection === 'asc' ? 'fa-arrow-up-wide-short' : 'fa-arrow-down-wide-short'} text-purple-600`}></i>
+                                    <span>{sortDirection === 'asc' ? 'น้อย → มาก' : 'มาก → น้อย'}</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div className="text-xs text-slate-500 font-medium">
@@ -1282,17 +1451,17 @@
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
                                     <tr>
-                                        <th className="p-3.5">รหัส / จังหวัด</th>
-                                        <th className="p-3.5">หมวดหมู่ / รายละเอียดโครงการ</th>
-                                        <th className="p-3.5 text-right">วงเงินงบประมาณ</th>
-                                        <th className="p-3.5 text-center">สถานะขั้นตอน</th>
+                                        {renderSortTh('province', 'รหัส / จังหวัด')}
+                                        {renderSortTh('item', 'หมวดหมู่ / รายละเอียดโครงการ')}
+                                        {renderSortTh('budget', 'วงเงินงบประมาณ', 'text-right')}
+                                        {renderSortTh('status', 'สถานะขั้นตอน', 'text-center')}
                                         <th className="p-3.5 text-center">เอกสารแนบ</th>
                                         <th className="p-3.5 text-center">ประวัติ</th>
                                         <th className="p-3.5 text-center">การดำเนินการตามสิทธิ์</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200">
-                                    {filtered.length === 0 ? (
+                                    {sortedRequests.length === 0 ? (
                                         <tr>
                                             <td colSpan="7" className="text-center py-10 text-slate-400">
                                                 <i className="fas fa-folder-open text-2xl mb-2 block"></i>
@@ -1300,7 +1469,7 @@
                                             </td>
                                         </tr>
                                     ) : (
-                                        filtered.map(req => (
+                                        sortedRequests.map(req => (
                                             <tr key={req.id} className="hover:bg-slate-50 transition-colors">
                                                 <td className="p-3.5">
                                                     <span className="font-mono text-[10px] text-slate-400 block">{req.id}</span>
