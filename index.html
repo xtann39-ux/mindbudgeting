@@ -32,6 +32,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js"></script>
 
     <script>
         tailwind.config = {
@@ -334,15 +335,28 @@
         ];
         const DEMO_USERS = INITIAL_USERS;
 
-        // Firebase Service Helper
+        // Official Production Firebase Configuration (สป.อก.)
+        const DEFAULT_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyCQY-WKfkzkocV9_SppuooSod2JX6dwUSg",
+            authDomain: "mindbudgeting.firebaseapp.com",
+            projectId: "mindbudgeting",
+            storageBucket: "mindbudgeting.firebasestorage.app",
+            messagingSenderId: "675965109820",
+            appId: "1:675965109820:web:de942e7bf86701e0982539",
+            measurementId: "G-RD2XM3HZ1N"
+        };
+
+        // Firebase Service Helper (with Realtime Firestore, Auth, Storage & Analytics)
         const FirebaseService = {
             isConfigured: false,
+            app: null,
             auth: null,
             db: null,
             storage: null,
+            analytics: null,
 
             init(customConfig) {
-                const config = customConfig || this.getConfig();
+                const config = customConfig || this.getConfig() || DEFAULT_FIREBASE_CONFIG;
                 if (!config || !config.apiKey) {
                     this.isConfigured = false;
                     return false;
@@ -350,13 +364,22 @@
                 try {
                     if (window.firebase) {
                         if (!firebase.apps.length) {
-                            firebase.initializeApp(config);
+                            this.app = firebase.initializeApp(config);
+                        } else {
+                            this.app = firebase.app();
                         }
                         this.auth = firebase.auth();
                         this.db = firebase.firestore();
                         this.storage = firebase.storage();
+                        try {
+                            if (firebase.analytics && config.measurementId) {
+                                this.analytics = firebase.analytics();
+                            }
+                        } catch (ae) {
+                            console.warn('Analytics initialization notice:', ae);
+                        }
                         this.isConfigured = true;
-                        console.log('Firebase App & Storage initialized successfully!');
+                        console.log('Firebase App, Firestore, Storage & Analytics connected successfully to:', config.projectId);
                         return true;
                     }
                 } catch (e) {
@@ -368,15 +391,19 @@
 
             getConfig() {
                 try {
+                    const isDisconnected = localStorage.getItem('mindbudget_firebase_disconnected');
+                    if (isDisconnected === 'true') {
+                        return null;
+                    }
                     const raw = localStorage.getItem('mindbudget_firebase_config');
-                    return raw ? JSON.parse(raw) : null;
-                } catch(e) {
-                    return null;
-                }
+                    if (raw) return JSON.parse(raw);
+                } catch(e) {}
+                return DEFAULT_FIREBASE_CONFIG;
             },
 
             saveConfig(cfg) {
                 try {
+                    localStorage.removeItem('mindbudget_firebase_disconnected');
                     localStorage.setItem('mindbudget_firebase_config', JSON.stringify(cfg));
                     return this.init(cfg);
                 } catch(e) {
@@ -384,12 +411,25 @@
                 }
             },
 
+            resetToDefault() {
+                try {
+                    localStorage.removeItem('mindbudget_firebase_disconnected');
+                    localStorage.removeItem('mindbudget_firebase_config');
+                    return this.init(DEFAULT_FIREBASE_CONFIG);
+                } catch(e) {
+                    return false;
+                }
+            },
+
             clearConfig() {
+                localStorage.setItem('mindbudget_firebase_disconnected', 'true');
                 localStorage.removeItem('mindbudget_firebase_config');
                 this.isConfigured = false;
+                this.app = null;
                 this.auth = null;
                 this.db = null;
                 this.storage = null;
+                this.analytics = null;
             }
         };
 
@@ -1627,11 +1667,16 @@
             const [error, setError] = useState(null);
 
             useEffect(() => {
-                const current = FirebaseService.getConfig();
+                const current = FirebaseService.getConfig() || DEFAULT_FIREBASE_CONFIG;
                 if (current) {
                     setJsonInput(JSON.stringify(current, null, 2));
                 }
             }, [isOpen]);
+
+            const handleResetDefault = () => {
+                setJsonInput(JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2));
+                setError(null);
+            };
 
             if (!isOpen) return null;
 
@@ -1676,6 +1721,16 @@
                             </div>
                         )}
 
+                        <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[11px] font-semibold text-slate-500">Firebase Config (สป.อก. Production)</span>
+                            <button 
+                                type="button" 
+                                onClick={handleResetDefault}
+                                className="text-[11px] text-brand-600 hover:text-brand-800 font-semibold flex items-center gap-1"
+                            >
+                                <i className="fas fa-rotate-left"></i> โหลดคอนฟิก สป.อก. เริ่มต้น
+                            </button>
+                        </div>
                         <textarea 
                             rows="8" 
                             value={jsonInput} 
@@ -2689,6 +2744,8 @@
                                 snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
                                 setRequests(items);
                             }
+                        }, error => {
+                            console.warn('Realtime requests sync notice:', error.message);
                         });
                         return () => unsub();
                     } catch(e) {
